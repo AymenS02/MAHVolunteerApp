@@ -1,34 +1,22 @@
 import { Tabs } from "expo-router";
+import { Text } from "react-native";
 
-export default function TabLayout() {
+const icon = (emoji: string) => () => <Text className="text-xl">{emoji}</Text>;
+
+export default function TabsLayout() {
   return (
-    <Tabs>
+    <Tabs screenOptions={{ tabBarActiveTintColor: "#059669" }}>
       <Tabs.Screen
         name="index"
-        options={{
-          title: "Home",
-        }}
+        options={{ title: "Home", tabBarIcon: icon("🏠") }}
       />
-
       <Tabs.Screen
         name="events"
-        options={{
-          title: "Events",
-        }}
+        options={{ title: "Events", tabBarIcon: icon("📅") }}
       />
-
-      <Tabs.Screen
-        name="hours"
-        options={{
-          title: "Hours",
-        }}
-      />
-
       <Tabs.Screen
         name="profile"
-        options={{
-          title: "Profile",
-        }}
+        options={{ title: "Profile", tabBarIcon: icon("👤") }}
       />
     </Tabs>
   );

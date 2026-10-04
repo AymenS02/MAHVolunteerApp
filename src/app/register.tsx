@@ -1,7 +1,10 @@
-import { Link, useRouter } from "expo-router";
+import { useAuth } from "@/context/AuthContext";
+import { Gender } from "@/types";
+import { Link, Redirect, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -19,34 +22,30 @@ type FormData = {
   phone: string;
   password: string;
   confirmPassword: string;
+  gender: Gender | null;
   highschoolStudent: boolean;
 };
 
 type FormErrors = Partial<Record<keyof FormData, string>>;
 
-// Mirrors the backend zod schema (createUserSchema) so errors match what the API would return
 const validate = (data: FormData): FormErrors => {
   const errors: FormErrors = {};
 
   if (data.firstName.trim().length < 2)
     errors.firstName = "First name must be at least 2 characters";
-
   if (data.lastName.trim().length < 2)
     errors.lastName = "Last name must be at least 2 characters";
-
   if (!/^\S+@\S+\.\S+$/.test(data.email.trim()))
     errors.email = "Invalid email address";
-
   if (data.phone.replace(/\D/g, "").length < 10)
     errors.phone = "Phone number must be at least 10 digits";
-
   if (data.password.length < 6)
     errors.password = "Password must be at least 6 characters";
   else if (!/[A-Z]/.test(data.password))
     errors.password = "Password must contain at least one uppercase letter";
-
   if (data.confirmPassword !== data.password)
     errors.confirmPassword = "Passwords do not match";
+  if (!data.gender) errors.gender = "Please select Brother or Sister";
 
   return errors;
 };
@@ -56,7 +55,7 @@ const inputErrorClass = "border border-red-500 rounded-lg p-4 text-gray-900";
 
 export default function Register() {
   const router = useRouter();
-
+  const { user, register } = useAuth();
   const [formData, setFormData] = useState<FormData>({
     firstName: "",
     lastName: "",
@@ -64,41 +63,45 @@ export default function Register() {
     phone: "",
     password: "",
     confirmPassword: "",
+    gender: null,
     highschoolStudent: false,
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleChange = <K extends keyof FormData>(
-    field: K,
-    value: FormData[K],
-  ) => {
+  if (user) {
+    return <Redirect href="/(tabs)/events" />;
+  }
+
+  const handleChange = <K extends keyof FormData>(field: K, value: FormData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    // Clear that field's error as soon as the user edits it
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
   const handleSubmit = async () => {
     const validationErrors = validate(formData);
     setErrors(validationErrors);
-    if (Object.keys(validationErrors).length > 0) return;
+    if (Object.keys(validationErrors).length > 0 || !formData.gender) return;
 
     setLoading(true);
     try {
-      // TODO: replace the mock with the real call when the backend is hooked up:
-      // await api.post("/users", {
-      //   firstName: formData.firstName.trim(),
-      //   lastName: formData.lastName.trim(),
-      //   email: formData.email.trim().toLowerCase(),
-      //   password: formData.password,
-      //   phone: formData.phone.trim(),
-      //   highschoolStudent: formData.highschoolStudent,
-      // });
-      // 409 -> setErrors({ email: "A user with this email already exists." })
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await register({
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        phone: formData.phone.trim(),
+        gender: formData.gender,
+        highschoolStudent: formData.highschoolStudent,
+      });
 
-      router.replace("/(tabs)");
+      router.replace("/(tabs)/events");
+    } catch (error: any) {
+      Alert.alert(
+        "Registration failed",
+        error.response?.data?.message || "Please check your details and try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -114,149 +117,138 @@ export default function Register() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-3xl font-bold text-gray-900 mb-2">
-          Create Account
-        </Text>
-        <Text className="text-gray-500 mb-8">Join MAH as a volunteer</Text>
+        <Text className="mb-2 text-3xl font-bold text-gray-900">Create Account</Text>
+        <Text className="mb-8 text-gray-500">Join MAH as a volunteer</Text>
 
-        {/* Name row */}
-        <View className="flex-row gap-3 mb-4">
+        <View className="mb-4 flex-row gap-3">
           <View className="flex-1">
             <TextInput
               placeholder="First Name"
-              autoCapitalize="words"
-              autoComplete="given-name"
-              textContentType="givenName"
-              returnKeyType="next"
               value={formData.firstName}
               onChangeText={(text) => handleChange("firstName", text)}
               className={errors.firstName ? inputErrorClass : inputClass}
             />
             {errors.firstName && (
-              <Text className="text-red-500 text-xs mt-1">
-                {errors.firstName}
-              </Text>
+              <Text className="mt-1 text-xs text-red-500">{errors.firstName}</Text>
             )}
           </View>
-
           <View className="flex-1">
             <TextInput
               placeholder="Last Name"
-              autoCapitalize="words"
-              autoComplete="family-name"
-              textContentType="familyName"
-              returnKeyType="next"
               value={formData.lastName}
               onChangeText={(text) => handleChange("lastName", text)}
               className={errors.lastName ? inputErrorClass : inputClass}
             />
             {errors.lastName && (
-              <Text className="text-red-500 text-xs mt-1">
-                {errors.lastName}
-              </Text>
+              <Text className="mt-1 text-xs text-red-500">{errors.lastName}</Text>
             )}
           </View>
         </View>
 
-        {/* Email */}
         <View className="mb-4">
           <TextInput
             placeholder="Email"
             keyboardType="email-address"
             autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="email"
-            textContentType="emailAddress"
-            returnKeyType="next"
             value={formData.email}
             onChangeText={(text) => handleChange("email", text)}
             className={errors.email ? inputErrorClass : inputClass}
           />
-          {errors.email && (
-            <Text className="text-red-500 text-xs mt-1">{errors.email}</Text>
-          )}
+          {errors.email && <Text className="mt-1 text-xs text-red-500">{errors.email}</Text>}
         </View>
 
-        {/* Phone */}
         <View className="mb-4">
           <TextInput
             placeholder="Phone Number"
             keyboardType="phone-pad"
-            autoComplete="tel"
-            textContentType="telephoneNumber"
-            returnKeyType="next"
             value={formData.phone}
             onChangeText={(text) => handleChange("phone", text)}
             className={errors.phone ? inputErrorClass : inputClass}
           />
-          {errors.phone && (
-            <Text className="text-red-500 text-xs mt-1">{errors.phone}</Text>
-          )}
+          {errors.phone && <Text className="mt-1 text-xs text-red-500">{errors.phone}</Text>}
         </View>
 
-        {/* Password */}
         <View className="mb-4">
           <View className="relative justify-center">
             <TextInput
               placeholder="Password"
               secureTextEntry={!showPassword}
               autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="new-password"
-              textContentType="newPassword"
-              returnKeyType="next"
               value={formData.password}
               onChangeText={(text) => handleChange("password", text)}
               className={`${errors.password ? inputErrorClass : inputClass} pr-16`}
             />
             <Pressable
               onPress={() => setShowPassword((prev) => !prev)}
-              hitSlop={8}
               className="absolute right-4"
             >
-              <Text className="text-green-700 font-semibold text-sm">
+              <Text className="text-sm font-semibold text-green-700">
                 {showPassword ? "Hide" : "Show"}
               </Text>
             </Pressable>
           </View>
           {errors.password ? (
-            <Text className="text-red-500 text-xs mt-1">{errors.password}</Text>
+            <Text className="mt-1 text-xs text-red-500">{errors.password}</Text>
           ) : (
-            <Text className="text-gray-400 text-xs mt-1">
+            <Text className="mt-1 text-xs text-gray-500">
               At least 6 characters, including one uppercase letter
             </Text>
           )}
         </View>
 
-        {/* Confirm password */}
-        <View className="mb-6">
+        <View className="mb-4">
           <TextInput
             placeholder="Confirm Password"
             secureTextEntry={!showPassword}
             autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="new-password"
-            textContentType="newPassword"
-            returnKeyType="done"
-            onSubmitEditing={handleSubmit}
             value={formData.confirmPassword}
             onChangeText={(text) => handleChange("confirmPassword", text)}
             className={errors.confirmPassword ? inputErrorClass : inputClass}
           />
           {errors.confirmPassword && (
-            <Text className="text-red-500 text-xs mt-1">
-              {errors.confirmPassword}
-            </Text>
+            <Text className="mt-1 text-xs text-red-500">{errors.confirmPassword}</Text>
           )}
         </View>
 
-        {/* High school student toggle */}
-        <View className="flex-row items-center justify-between border border-gray-300 rounded-lg px-4 py-3 mb-2">
+        <View className="mb-4">
+          <Text className="mb-2 text-gray-900">Gender</Text>
+          <View className="flex-row gap-3">
+            <Pressable
+              onPress={() => handleChange("gender", "brother")}
+              className={`flex-1 rounded-lg border p-3 ${
+                formData.gender === "brother" ? "border-green-700 bg-green-700" : "border-gray-200"
+              }`}
+            >
+              <Text
+                className={`text-center font-medium ${
+                  formData.gender === "brother" ? "text-white" : "text-gray-900"
+                }`}
+              >
+                Brother
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => handleChange("gender", "sister")}
+              className={`flex-1 rounded-lg border p-3 ${
+                formData.gender === "sister" ? "border-green-700 bg-green-700" : "border-gray-200"
+              }`}
+            >
+              <Text
+                className={`text-center font-medium ${
+                  formData.gender === "sister" ? "text-white" : "text-gray-900"
+                }`}
+              >
+                Sister
+              </Text>
+            </Pressable>
+          </View>
+          {errors.gender && <Text className="mt-1 text-xs text-red-500">{errors.gender}</Text>}
+        </View>
+
+        <View className="mb-2 flex-row items-center justify-between rounded-lg border border-gray-300 px-4 py-3">
           <View className="flex-1 pr-4">
-            <Text className="text-gray-900 font-medium">
-              I'm a high school student
-            </Text>
-            <Text className="text-gray-500 text-xs mt-0.5">
+            <Text className="font-medium text-gray-900">I&apos;m a high school student</Text>
+            <Text className="mt-0.5 text-xs text-gray-500">
               Helps us track volunteer hours for school
             </Text>
           </View>
@@ -268,29 +260,23 @@ export default function Register() {
           />
         </View>
 
-        {/* Submit */}
         <Pressable
           onPress={handleSubmit}
           disabled={loading}
-          className={`rounded-lg p-4 mt-4 items-center ${
-            loading ? "bg-green-700/60" : "bg-green-700 active:bg-green-800"
-          }`}
+          className="mt-4 items-center rounded-lg bg-green-700 p-4"
         >
           {loading ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text className="text-white text-center font-semibold">
-              Create Account
-            </Text>
+            <Text className="text-center font-semibold text-white">Create Account</Text>
           )}
         </Pressable>
 
-        {/* Login link */}
         <Link href="/login" asChild>
           <Pressable className="mt-6">
-            <Text className="text-center text-gray-600">
+            <Text className="text-center text-gray-500">
               Already have an account?
-              <Text className="text-green-700 font-semibold"> Login</Text>
+              <Text className="font-semibold text-green-700"> Login</Text>
             </Text>
           </Pressable>
         </Link>

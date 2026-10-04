@@ -1,17 +1,44 @@
 import User from "../models/User.js";
+import { createUserSchema } from "../validators/userValidator.js";
 
 export const createUser = async (req, res) => {
   try {
-    const { name, email } = req.body;
+    const validation = createUserSchema.safeParse(req.body);
 
-    const newUser = await User.create({
-      name,
-      email,
+    if (!validation.success) {
+      return res.status(400).json({
+        errors: validation.error.errors,
+      });
+    }
+
+    const { firstName, lastName, email, password, phone, highschoolStudent } =
+      validation.data;
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
     });
 
-    res.status(201).json(newUser);
+    if (existingUser) {
+      return res.status(409).json({
+        message: "A user with this email already exists.",
+      });
+    }
+
+    const newUser = await User.create({
+      firstName,
+      lastName,
+      email: normalizedEmail,
+      password,
+      phone,
+      role: "volunteer",
+      highschoolStudent,
+    });
+
+    return res.status(201).json(newUser);
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       message: error.message,
     });
   }

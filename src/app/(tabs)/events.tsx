@@ -9,12 +9,14 @@ export default function EventsScreen() {
   const router = useRouter();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(0);
 
   const loadEvents = useCallback(async () => {
     try {
       setLoading(true);
       const { data } = await api.get<Event[]>("/events");
       setEvents(data);
+      setNow(Date.now());
     } catch (error: any) {
       Alert.alert("Error", error.response?.data?.message || "Failed to load events");
     } finally {
@@ -28,13 +30,13 @@ export default function EventsScreen() {
     }, [loadEvents]),
   );
 
-  const { upcoming, past } = useMemo(() => {
-    const now = Date.now();
-    return {
+  const { upcoming, past } = useMemo(
+    () => ({
       upcoming: events.filter((event) => new Date(event.date).getTime() > now),
       past: events.filter((event) => new Date(event.date).getTime() <= now),
-    };
-  }, [events]);
+    }),
+    [events, now],
+  );
 
   if (loading) {
     return (

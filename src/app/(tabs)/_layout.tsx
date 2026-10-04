@@ -2,8 +2,6 @@ import { useAuth } from "@/context/AuthContext";
 import { Tabs } from "expo-router";
 import { Text } from "react-native";
 
-const icon = (emoji: string) => () => <Text className="text-xl">{emoji}</Text>;
-
 export default function TabsLayout() {
   const { user } = useAuth();
 
@@ -17,17 +15,23 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen
         name="events"
-        options={{ title: "Events", tabBarIcon: icon("📅") }}
+        options={{
+          title: "Events",
+          tabBarIcon: () => <Text className="text-xl">📅</Text>,
+        }}
       />
       <Tabs.Screen
         name="profile"
-        options={{ title: "Profile", tabBarIcon: icon("👤") }}
+        options={{
+          title: "Profile",
+          tabBarIcon: () => <Text className="text-xl">👤</Text>,
+        }}
       />
       <Tabs.Screen
         name="admin"
         options={{
           title: "Admin",
-          tabBarIcon: icon("🛠️"),
+          tabBarIcon: () => <Text className="text-xl">🛠️</Text>,
           href: user?.role === "admin" ? undefined : null,
         }}
       />

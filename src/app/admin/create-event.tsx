@@ -24,7 +24,11 @@ export default function CreateEventScreen() {
   const [brothersContactPhone, setBrothersContactPhone] = useState("");
   const [sistersContactName, setSistersContactName] = useState("");
   const [sistersContactPhone, setSistersContactPhone] = useState("");
-  const [dateTime, setDateTime] = useState(new Date(Date.now() + 24 * 60 * 60 * 1000));
+  const [dateTime, setDateTime] = useState(() => {
+    const next = new Date();
+    next.setDate(next.getDate() + 1);
+    return next;
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
@@ -106,7 +110,9 @@ export default function CreateEventScreen() {
         <Text className="text-gray-900">Date: {dateTime.toLocaleDateString()}</Text>
       </Pressable>
       <Pressable onPress={() => setShowTimePicker(true)} className="rounded-lg border border-gray-200 p-4">
-        <Text className="text-gray-900">Time: {dateTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</Text>
+        <Text className="text-gray-900">
+          Time: {dateTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+        </Text>
       </Pressable>
 
       {showDatePicker && (
@@ -117,7 +123,11 @@ export default function CreateEventScreen() {
             setShowDatePicker(Platform.OS === "ios");
             if (selectedDate) {
               const next = new Date(dateTime);
-              next.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+              next.setFullYear(
+                selectedDate.getFullYear(),
+                selectedDate.getMonth(),
+                selectedDate.getDate(),
+              );
               setDateTime(next);
             }
           }}

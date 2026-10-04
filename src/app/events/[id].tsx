@@ -28,12 +28,14 @@ export default function EventDetailsScreen() {
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [now, setNow] = useState(0);
 
   const loadEvent = useCallback(async () => {
     try {
       setLoading(true);
       const { data } = await api.get<Event>(`/events/${id}`);
       setEvent(data);
+      setNow(Date.now());
     } catch (error: any) {
       Alert.alert("Error", error.response?.data?.message || "Failed to load event");
     } finally {
@@ -50,7 +52,6 @@ export default function EventDetailsScreen() {
   const eventState = useMemo(() => {
     if (!event || !user) return { disabled: true, label: "Loading", reason: "" };
 
-    const now = Date.now();
     const start = new Date(event.date).getTime();
     const cancelLock = start - 10 * 60 * 60 * 1000;
     const registeredCount =
@@ -94,38 +95,38 @@ export default function EventDetailsScreen() {
     }
 
     return { disabled: false, label: "Register to Volunteer", reason: "" };
-  }, [event, user]);
+  }, [event, now, user]);
 
   const handleAction = async () => {
     if (!event) return;
 
+    if (event.myStatus === "registered") {
+      Alert.alert("Cancel registration", "Are you sure you want to cancel?", [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Cancel registration",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+              await api.delete(`/events/${event._id}/register`);
+              await loadEvent();
+            } catch (error: any) {
+              Alert.alert(
+                "Error",
+                error.response?.data?.message || "Failed to cancel registration",
+              );
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]);
+      return;
+    }
+
     try {
       setActionLoading(true);
-
-      if (event.myStatus === "registered") {
-        Alert.alert("Cancel registration", "Are you sure you want to cancel?", [
-          { text: "Keep", style: "cancel" },
-          {
-            text: "Cancel registration",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                await api.delete(`/events/${event._id}/register`);
-                await loadEvent();
-              } catch (error: any) {
-                Alert.alert(
-                  "Error",
-                  error.response?.data?.message || "Failed to cancel registration",
-                );
-              } finally {
-                setActionLoading(false);
-              }
-            },
-          },
-        ]);
-        return;
-      }
-
       await api.post(`/events/${event._id}/register`);
       await loadEvent();
     } catch (error: any) {
@@ -144,7 +145,11 @@ export default function EventDetailsScreen() {
   }
 
   const userContact =
-    user?.gender === "brother" ? event.brothersContact : user?.gender === "sister" ? event.sistersContact : undefined;
+    user?.gender === "brother"
+      ? event.brothersContact
+      : user?.gender === "sister"
+        ? event.sistersContact
+        : undefined;
 
   return (
     <ScrollView className="flex-1 bg-white" contentContainerClassName="gap-4 p-5">

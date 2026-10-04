@@ -1,30 +1,24 @@
-import { VolunteerEvent } from "@/types";
+import { Event } from "@/types";
 
 export const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric" });
 
-export const getStats = (events: VolunteerEvent[]) => {
-  const completed = events.filter((e) => e.attended);
-  return {
-    totalHours: completed.reduce((sum, e) => sum + e.hours, 0),
-    eventsCompleted: completed.length,
-  };
-};
+export const getStats = (events: Event[]) => ({
+  totalHours: events.reduce((sum, event) => sum + (event.myStatus === "approved" ? event.hours : 0), 0),
+  eventsCompleted: events.filter((event) => event.myStatus === "approved").length,
+});
 
-export const splitEvents = (events: VolunteerEvent[]) => {
-  const now = new Date();
-  const time = (e: VolunteerEvent) => new Date(e.date).getTime();
-  const future = events.filter((e) => new Date(e.date) >= now);
-
+export const splitEvents = (events: Event[]) => {
+  const time = (event: Event) => new Date(event.date).getTime();
   return {
-    registered: future
-      .filter((e) => e.registered)
+    registered: events
+      .filter((event) => event.myStatus === "registered")
       .sort((a, b) => time(a) - time(b)),
-    upcoming: future
-      .filter((e) => !e.registered)
+    upcoming: events
+      .filter((event) => new Date(event.date).getTime() > 0)
       .sort((a, b) => time(a) - time(b)),
     past: events
-      .filter((e) => new Date(e.date) < now && e.attended)
+      .filter((event) => new Date(event.date).getTime() <= 0)
       .sort((a, b) => time(b) - time(a)),
   };
 };

@@ -1,52 +1,54 @@
-import { VolunteerEvent } from "@/types";
-import { formatDate } from "@/utils/format";
-import { Text, View } from "react-native";
-import Button from "./Button";
+import { Event } from "@/types";
+import { Pressable, Text, View } from "react-native";
 
 type Props = {
-  event: VolunteerEvent;
-  variant: "registered" | "upcoming" | "past";
-  onRegister?: (id: string) => void;
+  event: Event;
+  onPress: () => void;
 };
 
-export default function EventCard({ event, variant, onRegister }: Props) {
+const formatDate = (date: string) =>
+  new Date(date).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+const spotsLeft = (max: number, registered: number) => Math.max(max - registered, 0);
+
+export default function EventCard({ event, onPress }: Props) {
   return (
-    <View className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <Text className="text-lg font-bold text-slate-900">{event.title}</Text>
-      <Text className="mt-1 text-sm text-slate-500">
-        📅 {formatDate(event.date)} · 📍 {event.location}
-      </Text>
-
-      <View className="mt-3 flex-row items-center justify-between">
-        {variant === "registered" && (
-          <>
-            <Text className="font-semibold text-emerald-600">Registered ✓</Text>
-            <Text className="text-sm text-slate-500">+{event.hours} hours</Text>
-          </>
-        )}
-
-        {variant === "upcoming" && (
-          <>
-            <Text className="text-sm text-slate-500">
-              {event.hours} volunteer hours
-            </Text>
-            <Button
-              title="Register"
-              onPress={() => onRegister?.(event.id)}
-              className="px-5 py-2"
-            />
-          </>
-        )}
-
-        {variant === "past" && (
-          <>
-            <Text className="font-semibold text-slate-600">Completed</Text>
-            <Text className="font-semibold text-emerald-600">
-              +{event.hours} hours
-            </Text>
-          </>
+    <Pressable
+      onPress={onPress}
+      className="rounded-lg border border-gray-200 bg-white p-4 active:bg-gray-50"
+    >
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="flex-1">
+          <Text className="text-lg font-semibold text-gray-900">{event.name}</Text>
+          <Text className="mt-1 text-gray-500">{formatDate(event.date)}</Text>
+          <Text className="text-gray-500">{event.location}</Text>
+          <Text className="mt-1 text-green-700">{event.hours} volunteer hours</Text>
+        </View>
+        {event.myStatus && (
+          <Text className="rounded-lg bg-green-700 px-2 py-1 text-xs font-semibold text-white">
+            {event.myStatus === "approved" ? "Approved" : "Registered"}
+          </Text>
         )}
       </View>
-    </View>
+
+      <View className="mt-4 gap-1">
+        {event.brothersMax > 0 && (
+          <Text className="text-gray-500">
+            Brothers: {spotsLeft(event.brothersMax, event.brothersRegistered)} left
+          </Text>
+        )}
+        {event.sistersMax > 0 && (
+          <Text className="text-gray-500">
+            Sisters: {spotsLeft(event.sistersMax, event.sistersRegistered)} left
+          </Text>
+        )}
+      </View>
+    </Pressable>
   );
 }

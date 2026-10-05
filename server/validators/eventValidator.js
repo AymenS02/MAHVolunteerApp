@@ -15,6 +15,7 @@ const spots = z
   .min(0)
   .max(500, "Spots per group can't be more than 500");
 
+// Used for both creating and editing an event.
 export const createEventSchema = z
   .object({
     name: z
@@ -34,10 +35,17 @@ export const createEventSchema = z
       .trim()
       .min(1, "Location is required")
       .max(200, "Location must be 200 characters or fewer"),
+    // Quarter hours add up exactly; amounts like 0.1 don't in floating point.
     hours: z
       .number()
       .positive("Hours must be greater than 0")
-      .max(24, "Hours can't be more than 24"),
+      .max(24, "Hours can't be more than 24")
+      .multipleOf(0.25, "Hours must be in quarter hours, like 1.5 or 2.25"),
+    description: z
+      .string()
+      .trim()
+      .max(2000, "Details must be 2000 characters or fewer")
+      .optional(),
     brothersMax: spots,
     sistersMax: spots,
     brothersContact: contactSchema.optional(),
@@ -60,3 +68,10 @@ export const createEventSchema = z
       });
     }
   });
+
+// GET /events?when=upcoming|past&limit=20&cursor=...
+export const eventPageSchema = z.object({
+  when: z.enum(["upcoming", "past"], { error: "when must be upcoming or past" }),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  cursor: z.string().max(200).optional(),
+});

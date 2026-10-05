@@ -1,10 +1,16 @@
 import Button from "@/components/Button";
+import HoursHistoryList from "@/components/HoursHistoryList";
+import SectionHeader from "@/components/SectionHeader";
 import StatCard from "@/components/StatCard";
+import api from "@/constants/api";
 import { useAuth } from "@/context/AuthContext";
 import { useSnackbarOffset } from "@/context/SnackbarContext";
-import { useFocusEffect } from "expo-router";
+import { HoursHistory } from "@/types";
+import { formatDateOfBirth, getAge } from "@/utils/dateOfBirth";
+import { Ionicons } from "@expo/vector-icons";
+import { type Href, useFocusEffect, useRouter } from "expo-router";
 import { useBottomTabBarHeight } from "expo-router/tabs";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
 function Row({
@@ -29,14 +35,34 @@ function Row({
   );
 }
 
+function LinkRow({ label, href }: { label: string; href: Href }) {
+  const router = useRouter();
+
+  return (
+    <Pressable
+      onPress={() => router.push(href)}
+      accessibilityRole="button"
+      className="flex-row items-center justify-between border-b border-gray-100 py-4 active:bg-gray-50"
+    >
+      <Text className="text-base text-gray-900">{label}</Text>
+      <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+    </Pressable>
+  );
+}
+
 export default function ProfileScreen() {
   const { user, logout, deleteAccount, refreshUser } = useAuth();
+  const [history, setHistory] = useState<HoursHistory | null>(null);
   useSnackbarOffset(useBottomTabBarHeight());
 
-  // Hours change when an admin approves or unapproves, so refresh on focus.
+  // Hours change when an admin approves or adjusts, so refresh on focus.
   useFocusEffect(
     useCallback(() => {
       refreshUser().catch(() => {});
+      api
+        .get<HoursHistory>("/users/me/hours")
+        .then(({ data }) => setHistory(data))
+        .catch(() => {});
     }, [refreshUser]),
   );
 
@@ -102,17 +128,42 @@ export default function ProfileScreen() {
       </View>
 
       <View className="mt-8 flex-row">
-        <StatCard label="Volunteer hours" value={user.volunteerHours} />
+        {/* The total is the sum of the history below, by construction. */}
+        <StatCard
+          label="Volunteer hours"
+          value={history?.total ?? user.volunteerHours}
+        />
       </View>
+
+      {history && (
+        <View className="mt-8">
+          <SectionHeader title="Hours history" />
+          <HoursHistoryList
+            items={history.items}
+            emptyText="Hours appear here once an organizer approves an event you attended."
+          />
+        </View>
+      )}
 
       <View className="mt-8">
         <Row label="Email" value={user.email} />
         <Row label="Phone" value={user.phone} />
+        {user.dateOfBirth ? (
+          <Row
+            label="Date of birth"
+            value={`${formatDateOfBirth(user.dateOfBirth)} (${getAge(user.dateOfBirth)})`}
+          />
+        ) : null}
         <Row
           label="Group"
           value={user.gender === "brother" ? "Brother" : "Sister"}
         />
         <Row label="Role" value={user.role} capitalize />
+      </View>
+
+      <View className="mt-8">
+        <LinkRow label="Edit profile" href="/profile/edit" />
+        <LinkRow label="Change password" href="/profile/password" />
       </View>
 
       <View className="mt-10">

@@ -12,7 +12,9 @@ export const auth = async (req, res, next) => {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(payload.userId);
+    // req.user is only ever returned to this same user, so it can carry
+    // their own date of birth.
+    const user = await User.findById(payload.userId).select("+dateOfBirth");
 
     // Tokens issued before tokenVersion existed carry no `tv` and count as 0.
     if (!user || (payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {

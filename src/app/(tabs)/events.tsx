@@ -1,21 +1,25 @@
 import EventCard from "@/components/EventCard";
 import api from "@/constants/api";
 import { useSnackbarOffset } from "@/context/SnackbarContext";
-import { Event } from "@/types";
+import { EventPage } from "@/types";
+import { apiErrorMessage } from "@/utils/apiError";
 import { onEventsChanged } from "@/utils/eventsChanged";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useBottomTabBarHeight } from "expo-router/tabs";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Pressable,
-  ScrollView,
   Text,
   View,
 } from "react-native";
 
 type Tab = "upcoming" | "past";
+
+const PAGE_SIZE = 20;
+const EMPTY_PAGE: EventPage = { items: [], nextCursor: null, total: 0 };
 
 function EmptyState({ title, hint }: { title: string; hint: string }) {
   return (
@@ -60,25 +64,39 @@ function TabButton({
   );
 }
 
+const fetchPage = async (when: Tab, cursor?: string | null) => {
+  const { data } = await api.get<EventPage>("/events", {
+    params: { when, limit: PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+  });
+  return data;
+};
+
 export default function EventsScreen() {
   const router = useRouter();
-  const [events, setEvents] = useState<Event[]>([]);
+  const [pages, setPages] = useState<Record<Tab, EventPage>>({
+    upcoming: EMPTY_PAGE,
+    past: EMPTY_PAGE,
+  });
   const [loading, setLoading] = useState(true);
-  const [now, setNow] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [tab, setTab] = useState<Tab>("upcoming");
+  // Bumped on every reload so a slow "load more" can't append to a newer list.
+  const generation = useRef(0);
   useSnackbarOffset(useBottomTabBarHeight());
 
-  const loadEvents = useCallback(async (showSpinner = true) => {
+  // First page of both tabs, so both counts are right.
+  const reload = useCallback(async (showSpinner = true) => {
+    const current = ++generation.current;
     try {
       if (showSpinner) setLoading(true);
-      const { data } = await api.get<Event[]>("/events");
-      setEvents(data);
-      setNow(Date.now());
-    } catch (error: any) {
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || "Failed to load events",
-      );
+      const [upcoming, past] = await Promise.all([
+        fetchPage("upcoming"),
+        fetchPage("past"),
+      ]);
+      if (current === generation.current) setPages({ upcoming, past });
+    } catch (error) {
+      Alert.alert("Error", apiErrorMessage(error, "Failed to load events"));
     } finally {
       setLoading(false);
     }
@@ -86,19 +104,47 @@ export default function EventsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadEvents();
-    }, [loadEvents]),
+      reload();
+    }, [reload]),
   );
 
-  useEffect(() => onEventsChanged(() => loadEvents(false)), [loadEvents]);
+  useEffect(() => onEventsChanged(() => reload(false)), [reload]);
 
-  const { upcoming, past } = useMemo(
-    () => ({
-      upcoming: events.filter((event) => new Date(event.date).getTime() > now),
-      past: events.filter((event) => new Date(event.date).getTime() <= now),
-    }),
-    [events, now],
-  );
+  const refresh = async () => {
+    setRefreshing(true);
+    await reload(false);
+    setRefreshing(false);
+  };
+
+  const loadMore = async () => {
+    const page = pages[tab];
+    if (!page.nextCursor || loadingMore) return;
+
+    const current = generation.current;
+    try {
+      setLoadingMore(true);
+      const next = await fetchPage(tab, page.nextCursor);
+      if (current !== generation.current) return;
+      setPages((prev) => {
+        const seen = new Set(prev[tab].items.map((event) => event._id));
+        return {
+          ...prev,
+          [tab]: {
+            items: [
+              ...prev[tab].items,
+              ...next.items.filter((event) => !seen.has(event._id)),
+            ],
+            nextCursor: next.nextCursor,
+            total: next.total,
+          },
+        };
+      });
+    } catch (error) {
+      Alert.alert("Error", apiErrorMessage(error, "Failed to load more events"));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -108,33 +154,42 @@ export default function EventsScreen() {
     );
   }
 
-  const visible = tab === "upcoming" ? upcoming : past;
-
   return (
-    <ScrollView
+    <FlatList
       className="flex-1 bg-white"
-      contentContainerClassName="gap-3 px-5 pb-10 pt-4"
+      contentContainerClassName="px-5 pb-10 pt-4"
       showsVerticalScrollIndicator={false}
-    >
-      <View
-        accessibilityRole="tablist"
-        className="mb-2 flex-row rounded-xl bg-gray-100 p-1"
-      >
-        <TabButton
-          label="Upcoming"
-          count={upcoming.length}
-          active={tab === "upcoming"}
-          onPress={() => setTab("upcoming")}
-        />
-        <TabButton
-          label="Past"
-          count={past.length}
-          active={tab === "past"}
-          onPress={() => setTab("past")}
-        />
-      </View>
-
-      {visible.length === 0 ? (
+      data={pages[tab].items}
+      keyExtractor={(event) => event._id}
+      renderItem={({ item }) => (
+        <View className={tab === "past" ? "opacity-60" : ""}>
+          <EventCard
+            event={item}
+            onPress={() => router.push(`/events/${item._id}`)}
+          />
+        </View>
+      )}
+      ItemSeparatorComponent={() => <View className="h-3" />}
+      ListHeaderComponent={
+        <View
+          accessibilityRole="tablist"
+          className="mb-5 flex-row rounded-xl bg-gray-100 p-1"
+        >
+          <TabButton
+            label="Upcoming"
+            count={pages.upcoming.total}
+            active={tab === "upcoming"}
+            onPress={() => setTab("upcoming")}
+          />
+          <TabButton
+            label="Past"
+            count={pages.past.total}
+            active={tab === "past"}
+            onPress={() => setTab("past")}
+          />
+        </View>
+      }
+      ListEmptyComponent={
         tab === "upcoming" ? (
           <EmptyState
             title="No upcoming events"
@@ -146,16 +201,18 @@ export default function EventsScreen() {
             hint="Events you've been part of will appear here."
           />
         )
-      ) : (
-        visible.map((event) => (
-          <View key={event._id} className={tab === "past" ? "opacity-60" : ""}>
-            <EventCard
-              event={event}
-              onPress={() => router.push(`/events/${event._id}`)}
-            />
+      }
+      ListFooterComponent={
+        loadingMore ? (
+          <View className="py-6">
+            <ActivityIndicator color="#15803d" />
           </View>
-        ))
-      )}
-    </ScrollView>
+        ) : null
+      }
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.5}
+      refreshing={refreshing}
+      onRefresh={refresh}
+    />
   );
 }

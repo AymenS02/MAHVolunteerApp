@@ -1,9 +1,10 @@
-// Compares each user's volunteerHours with the hours from their approved
-// registrations. Reports differences by default; pass --apply to fix them.
+// Compares each user's stored volunteerHours with their hours history
+// (approved events plus admin adjustments). Reports differences by default;
+// pass --apply to fix them.
 import dotenv from "dotenv";
 import mongoose from "mongoose";
-import Event from "../models/Event.js";
 import User from "../models/User.js";
+import { buildHistory, roundHours } from "../services/hours.js";
 
 dotenv.config();
 
@@ -12,27 +13,16 @@ const apply = process.argv.includes("--apply");
 try {
   await mongoose.connect(process.env.MONGO_URI);
 
-  const earned = await Event.aggregate([
-    { $unwind: "$volunteers" },
-    { $match: { "volunteers.status": "approved" } },
-    {
-      $group: {
-        _id: "$volunteers.user",
-        hours: { $sum: { $ifNull: ["$volunteers.hoursAwarded", "$hours"] } },
-      },
-    },
-  ]);
-  const expectedByUser = new Map(earned.map((e) => [e._id.toString(), e.hours]));
-
+  // Same calculation the app shows: approved events plus adjustments.
   const users = await User.find().select("email volunteerHours");
-  const drift = users
-    .map((user) => ({
-      id: user._id,
-      email: user.email,
-      stored: user.volunteerHours ?? 0,
-      expected: expectedByUser.get(user._id.toString()) ?? 0,
-    }))
-    .filter((row) => row.stored !== row.expected);
+  const drift = [];
+  for (const user of users) {
+    const { total } = await buildHistory(user._id);
+    const stored = roundHours(user.volunteerHours ?? 0);
+    if (stored !== total) {
+      drift.push({ id: user._id, email: user.email, stored, expected: total });
+    }
+  }
 
   if (drift.length === 0) {
     console.log(`All ${users.length} users have correct volunteerHours`);

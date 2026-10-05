@@ -28,7 +28,12 @@ export const startApp = async (options = {}) => {
   const app = createApp({
     corsOrigins: [],
     ...options,
-    rateLimits: { loginMax: 10000, registerMax: 10000, ...options.rateLimits },
+    rateLimits: {
+      loginMax: 10000,
+      registerMax: 10000,
+      passwordMax: 10000,
+      ...options.rateLimits,
+    },
   });
   const server = await new Promise((resolve) => {
     const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
@@ -49,7 +54,11 @@ export const startApp = async (options = {}) => {
     return { status: res.status, headers: res.headers, body: text ? JSON.parse(text) : null };
   };
 
-  const makeUser = async ({ gender = "brother", admin = false } = {}) => {
+  const makeUser = async ({
+    gender = "brother",
+    admin = false,
+    dateOfBirth = "2000-01-01",
+  } = {}) => {
     const email = `test-${++userCount}@example.com`;
     const password = "Password1";
     const res = await call(null, "POST", "/api/auth/register", {
@@ -59,9 +68,28 @@ export const startApp = async (options = {}) => {
       password,
       phone: "5555550100",
       gender,
+      dateOfBirth,
     });
     if (res.status !== 201) throw new Error(`register failed: ${JSON.stringify(res.body)}`);
     if (admin) await User.updateOne({ email }, { role: "admin" });
+    return { id: res.body.user._id, token: res.body.token, email, password, gender, dateOfBirth };
+  };
+
+  // An account created before dateOfBirth existed: inserted directly, then
+  // signed in through the API.
+  const makeLegacyUser = async ({ gender = "brother" } = {}) => {
+    const email = `legacy-${++userCount}@example.com`;
+    const password = "Password1";
+    await User.create({
+      firstName: "Legacy",
+      lastName: `User ${userCount}`,
+      email,
+      password,
+      phone: "5555550100",
+      gender,
+    });
+    const res = await call(null, "POST", "/api/auth/login", { email, password });
+    if (res.status !== 200) throw new Error(`legacy login failed: ${JSON.stringify(res.body)}`);
     return { id: res.body.user._id, token: res.body.token, email, password, gender };
   };
 
@@ -82,7 +110,20 @@ export const startApp = async (options = {}) => {
     return res.body._id;
   };
 
+  // Moves an event's start into the past: you can only register before an
+  // event starts and only approve hours after.
+  const startEvent = (eventId) =>
+    Event.updateOne({ _id: eventId }, { $set: { date: new Date(Date.now() - HOUR) } });
+
+  // Registers, starts the event and approves: hours are awarded.
+  const attend = async (admin, user, eventId) => {
+    await call(user, "POST", `/api/events/${eventId}/register`);
+    await startEvent(eventId);
+    const res = await call(admin, "PATCH", `/api/events/${eventId}/volunteers/${user.id}/approve`);
+    if (res.status !== 200) throw new Error(`approve failed: ${JSON.stringify(res.body)}`);
+  };
+
   const stop = () => new Promise((resolve) => server.close(resolve));
 
-  return { base, call, makeUser, makeEvent, stop };
+  return { base, call, makeUser, makeLegacyUser, makeEvent, startEvent, attend, stop };
 };

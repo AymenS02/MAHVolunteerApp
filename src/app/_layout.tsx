@@ -1,4 +1,4 @@
-import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { AuthProvider, needsProfile, useAuth } from "@/context/AuthContext";
 import { SnackbarProvider, useSnackbar } from "@/context/SnackbarContext";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
@@ -13,12 +13,20 @@ function AppNavigator() {
     if (!user) hide();
   }, [user, hide]);
 
+  const profileMissing = needsProfile(user);
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={!!user}>
+      <Stack.Protected guard={!!user && !profileMissing}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="events" />
         <Stack.Screen name="admin" />
+        <Stack.Screen name="profile" />
+      </Stack.Protected>
+
+      {/* Older accounts are held here until they add a date of birth. */}
+      <Stack.Protected guard={profileMissing}>
+        <Stack.Screen name="complete-profile" />
       </Stack.Protected>
 
       <Stack.Protected guard={!user}>

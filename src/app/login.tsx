@@ -1,5 +1,5 @@
 import Button from "@/components/Button";
-import { useAuth } from "@/context/AuthContext";
+import { homeHref, useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Link, Redirect, router } from "expo-router";
 import { useRef, useState } from "react";
@@ -24,7 +24,7 @@ export default function LoginScreen() {
   const passwordRef = useRef<TextInput>(null);
 
   if (user) {
-    return <Redirect href="/(tabs)/events" />;
+    return <Redirect href={homeHref(user)} />;
   }
 
   const handleLogin = async () => {
@@ -35,8 +35,8 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
-      await login(email.trim().toLowerCase(), password);
-      router.replace("/(tabs)/events");
+      const signedIn = await login(email.trim().toLowerCase(), password);
+      router.replace(homeHref(signedIn));
     } catch (error: any) {
       Alert.alert(
         "Login failed",

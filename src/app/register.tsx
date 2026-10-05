@@ -1,10 +1,12 @@
 import Button from "@/components/Button";
-import { useAuth } from "@/context/AuthContext";
+import DateOfBirthField from "@/components/DateOfBirthField";
+import TextField from "@/components/TextField";
+import { homeHref, useAuth } from "@/context/AuthContext";
 import { Gender } from "@/types";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import { Link, Redirect, useRouter } from "expo-router";
-import { type ReactNode, type RefObject, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -14,7 +16,6 @@ import {
   Switch,
   Text,
   TextInput,
-  TextInputProps,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -24,6 +25,7 @@ type FormData = {
   lastName: string;
   email: string;
   phone: string;
+  dateOfBirth: string | null;
   password: string;
   confirmPassword: string;
   gender: Gender | null;
@@ -43,6 +45,7 @@ const validate = (data: FormData): FormErrors => {
     errors.email = "Invalid email address";
   if (data.phone.replace(/\D/g, "").length < 10)
     errors.phone = "Phone number must be at least 10 digits";
+  if (!data.dateOfBirth) errors.dateOfBirth = "Please enter your date of birth";
   if (data.password.length < 6)
     errors.password = "Password must be at least 6 characters";
   else if (!/[A-Z]/.test(data.password))
@@ -53,38 +56,6 @@ const validate = (data: FormData): FormErrors => {
 
   return errors;
 };
-
-type FieldProps = TextInputProps & {
-  label: string;
-  error?: string;
-  hint?: string;
-  inputRef?: RefObject<TextInput | null>;
-  right?: ReactNode;
-};
-
-function Field({ label, error, hint, inputRef, right, ...props }: FieldProps) {
-  return (
-    <View className="gap-1.5">
-      <Text className="text-sm font-medium text-gray-700">{label}</Text>
-      <View className="justify-center">
-        <TextInput
-          ref={inputRef}
-          placeholderTextColor="#9ca3af"
-          className={`rounded-xl px-4 py-3.5 text-base text-gray-900 ${
-            error ? "bg-red-50" : "bg-gray-50"
-          } ${right ? "pr-12" : ""}`}
-          {...props}
-        />
-        {right ? <View className="absolute right-4">{right}</View> : null}
-      </View>
-      {error ? (
-        <Text className="text-xs text-red-600">{error}</Text>
-      ) : hint ? (
-        <Text className="text-xs text-gray-500">{hint}</Text>
-      ) : null}
-    </View>
-  );
-}
 
 function GroupOption({
   label,
@@ -123,6 +94,7 @@ export default function Register() {
     lastName: "",
     email: "",
     phone: "",
+    dateOfBirth: null,
     password: "",
     confirmPassword: "",
     gender: null,
@@ -139,7 +111,7 @@ export default function Register() {
   const confirmRef = useRef<TextInput>(null);
 
   if (user) {
-    return <Redirect href="/(tabs)/events" />;
+    return <Redirect href={homeHref(user)} />;
   }
 
   const handleChange = <K extends keyof FormData>(
@@ -154,11 +126,16 @@ export default function Register() {
     const validationErrors = validate(formData);
     setErrors(validationErrors);
 
-    if (Object.keys(validationErrors).length > 0 || !formData.gender) return;
+    if (
+      Object.keys(validationErrors).length > 0 ||
+      !formData.gender ||
+      !formData.dateOfBirth
+    )
+      return;
 
     setLoading(true);
     try {
-      await register({
+      const newUser = await register({
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         email: formData.email.trim().toLowerCase(),
@@ -166,9 +143,10 @@ export default function Register() {
         phone: formData.phone.trim(),
         gender: formData.gender,
         highschoolStudent: formData.highschoolStudent,
+        dateOfBirth: formData.dateOfBirth,
       });
 
-      router.replace("/(tabs)/events");
+      router.replace(homeHref(newUser));
     } catch (error: unknown) {
       let message = "Please check your details and try again.";
 
@@ -228,7 +206,7 @@ export default function Register() {
           <View className="mt-10 gap-5">
             <View className="flex-row gap-3">
               <View className="flex-1">
-                <Field
+                <TextField
                   label="First name"
                   value={formData.firstName}
                   onChangeText={(text) => handleChange("firstName", text)}
@@ -240,7 +218,7 @@ export default function Register() {
                 />
               </View>
               <View className="flex-1">
-                <Field
+                <TextField
                   label="Last name"
                   inputRef={lastNameRef}
                   value={formData.lastName}
@@ -254,7 +232,7 @@ export default function Register() {
               </View>
             </View>
 
-            <Field
+            <TextField
               label="Email"
               inputRef={emailRef}
               value={formData.email}
@@ -270,7 +248,7 @@ export default function Register() {
               onSubmitEditing={() => phoneRef.current?.focus()}
             />
 
-            <Field
+            <TextField
               label="Phone number"
               inputRef={phoneRef}
               value={formData.phone}
@@ -283,7 +261,13 @@ export default function Register() {
               onSubmitEditing={() => passwordRef.current?.focus()}
             />
 
-            <Field
+            <DateOfBirthField
+              value={formData.dateOfBirth}
+              onChange={(value) => handleChange("dateOfBirth", value)}
+              error={errors.dateOfBirth}
+            />
+
+            <TextField
               label="Password"
               inputRef={passwordRef}
               value={formData.password}
@@ -315,7 +299,7 @@ export default function Register() {
               }
             />
 
-            <Field
+            <TextField
               label="Confirm password"
               inputRef={confirmRef}
               value={formData.confirmPassword}

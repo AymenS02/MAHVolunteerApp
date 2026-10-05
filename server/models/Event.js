@@ -18,7 +18,15 @@ const volunteerSchema = new mongoose.Schema(
       default: "registered",
     },
     // Hours added to user.volunteerHours when approved; unapproving subtracts exactly this.
+    // Admin partial-hour adjustments change it (see HourAdjustment).
     hoursAwarded: { type: Number },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    approvedAt: { type: Date },
+    // When an admin last changed the event's hours, which resets this
+    // entry's hoursAwarded to the new event hours.
+    hoursResetAt: { type: Date },
+    // Missing on registrations made before this field existed.
+    registeredAt: { type: Date },
   },
   { _id: false },
 );
@@ -34,6 +42,8 @@ const removedVolunteerSchema = new mongoose.Schema(
       required: true,
     },
     hoursAwarded: { type: Number },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    approvedAt: { type: Date },
     removedAt: { type: Date, default: Date.now },
     removedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
@@ -45,6 +55,8 @@ const eventSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     date: { type: Date, required: true },
     location: { type: String, required: true, trim: true },
+    // What to bring, where to meet, etc.
+    description: { type: String, trim: true },
     hours: { type: Number, required: true },
     brothersMax: { type: Number, required: true, default: 0, min: 0 },
     sistersMax: { type: Number, required: true, default: 0, min: 0 },
@@ -56,9 +68,18 @@ const eventSchema = new mongoose.Schema(
     // Soft delete: null while the event is live.
     deletedAt: { type: Date, default: null, index: true },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    // Set when an admin moves the event. People registered before the
+    // change may cancel even inside the 10-hour lock.
+    previousDate: { type: Date },
+    dateChangedAt: { type: Date },
   },
   { timestamps: true },
 );
+
+// Hours history looks events up by volunteer.
+eventSchema.index({ "volunteers.user": 1 });
+// Paged upcoming/past lists.
+eventSchema.index({ deletedAt: 1, date: 1, _id: 1 });
 
 eventSchema.pre("validate", function enforceContactRequirements() {
   if (this.brothersMax > 0) {

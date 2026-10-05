@@ -4,7 +4,7 @@ import helmet from "helmet";
 import { createAuthLimiters } from "./middleware/rateLimit.js";
 import authRoutes from "./routes/authRoutes.js";
 import eventRoutes from "./routes/eventRoutes.js";
-import userRoutes from "./routes/userRoutes.js";
+import { createUserRoutes } from "./routes/userRoutes.js";
 
 const parseList = (value) =>
   (value ?? "")
@@ -40,13 +40,28 @@ export const createApp = ({
   app.use(express.json({ limit: "10kb" }));
 
   // Register is reachable at both paths, so both share one limiter.
-  const { loginLimiter, registerLimiter } = createAuthLimiters(rateLimits);
+  const { loginLimiter, registerLimiter, passwordLimiter } =
+    createAuthLimiters(rateLimits);
   app.post("/api/auth/login", loginLimiter);
   app.post(["/api/auth/register", "/api/users"], registerLimiter);
 
-  app.use("/api/users", userRoutes);
+  app.use("/api/users", createUserRoutes({ passwordLimiter }));
   app.use("/api/auth", authRoutes);
   app.use("/api/events", eventRoutes);
+
+  // JSON instead of Express's HTML pages, which include stack traces in dev.
+  app.use((req, res) => {
+    res.status(404).json({ message: "Not found" });
+  });
+
+  // eslint-disable-next-line no-unused-vars -- Express needs all 4 args
+  app.use((error, req, res, next) => {
+    const status = error.status ?? error.statusCode ?? 500;
+    if (status >= 500) console.error(error);
+    res.status(status).json({
+      message: status >= 500 ? "Something went wrong" : "Invalid request",
+    });
+  });
 
   return app;
 };

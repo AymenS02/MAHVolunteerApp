@@ -1,4 +1,4 @@
-import { useAuth } from "@/context/AuthContext";
+import { homeHref, useAuth } from "@/context/AuthContext";
 import { Redirect, router } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 
@@ -6,7 +6,7 @@ export default function WelcomeScreen() {
   const { user } = useAuth();
 
   if (user) {
-    return <Redirect href="/(tabs)/events" />;
+    return <Redirect href={homeHref(user)} />;
   }
 
   return (

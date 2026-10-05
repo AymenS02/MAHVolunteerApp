@@ -21,19 +21,34 @@ type RegisterInput = {
   password: string;
   gender: "brother" | "sister";
   highschoolStudent: boolean;
+  dateOfBirth: string;
 };
 
 type AuthContextValue = {
   user: User | null;
   token: string | null;
   restoring: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (input: RegisterInput) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
+  register: (input: RegisterInput) => Promise<User>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   // Re-fetches the user, e.g. after an admin changed their volunteer hours.
   refreshUser: () => Promise<void>;
+  // One-time, for accounts created before date of birth was collected.
+  setDateOfBirth: (dateOfBirth: string) => Promise<void>;
+  updateProfile: (fields: ProfileFields) => Promise<void>;
+  // Signs out other devices; this one keeps working with the new token.
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 };
+
+type ProfileFields = { firstName: string; lastName: string; phone: string };
+
+// Accounts created before date of birth was collected must add it first.
+export const needsProfile = (user: User | null) => !!user && !user.dateOfBirth;
+
+// Where a signed-in user belongs.
+export const homeHref = (user: User) =>
+  needsProfile(user) ? "/complete-profile" : "/(tabs)/events";
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -128,6 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await saveSession(data.token);
         setToken(data.token);
         setUser(data.user);
+        return data.user;
       },
       register: async (input) => {
         const { data } = await api.post<{ token: string; user: User }>(
@@ -138,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await saveSession(data.token);
         setToken(data.token);
         setUser(data.user);
+        return data.user;
       },
       logout: clearSession,
       deleteAccount: async () => {
@@ -148,6 +165,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshUser: async () => {
         const { data } = await api.get<User>("/auth/me");
         setUser(data);
+      },
+      setDateOfBirth: async (dateOfBirth) => {
+        const { data } = await api.put<{ user: User }>(
+          "/users/me/date-of-birth",
+          { dateOfBirth },
+        );
+        setUser(data.user);
+      },
+      updateProfile: async (fields) => {
+        const { data } = await api.patch<{ user: User }>("/users/me", fields);
+        setUser(data.user);
+      },
+      changePassword: async (currentPassword, newPassword) => {
+        const { data } = await api.put<{ token: string }>(
+          "/users/me/password",
+          { currentPassword, newPassword },
+        );
+        await saveSession(data.token);
+        setToken(data.token);
       },
     };
   }, [restoring, token, user]);

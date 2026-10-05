@@ -5,8 +5,12 @@ import api from "@/constants/api";
 import { useSnackbar } from "@/context/SnackbarContext";
 import { EventVolunteer, RemovedVolunteer } from "@/types";
 import { apiErrorMessage } from "@/utils/apiError";
+import { formatDateOfBirth, getAge } from "@/utils/dateOfBirth";
 import { notifyEventsChanged } from "@/utils/eventsChanged";
+import { Ionicons } from "@expo/vector-icons";
 import { isAxiosError } from "axios";
+import { File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -36,50 +40,101 @@ function VolunteerRow({
   onRemove: () => void;
 }) {
   const name = fullName(volunteer);
+  const router = useRouter();
+  const [expanded, setExpanded] = useState(false);
+  const age = volunteer.dateOfBirth ? getAge(volunteer.dateOfBirth) : null;
+  const minor = age !== null && age < 18;
 
   return (
-    <View className="flex-row items-center gap-3 border-b border-gray-100 py-4">
-      <View className="flex-1">
-        <Text
-          numberOfLines={1}
-          className="text-base font-semibold text-gray-900"
+    <View className="border-b border-gray-100 py-4">
+      <View className="flex-row items-center gap-3">
+        <Pressable
+          onPress={() => setExpanded((open) => !open)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityHint="Shows date of birth and a link to their hours"
+          className="flex-1"
         >
-          {name}
-        </Text>
-        <View className="mt-0.5 flex-row items-center gap-2">
-          <Text className="text-sm text-gray-500">
-            {volunteer.gender === "brother" ? "Brother" : "Sister"}
-          </Text>
-          <Pressable
-            onPress={() => Linking.openURL(`tel:${volunteer.phone}`)}
-            accessibilityRole="link"
-            hitSlop={8}
-          >
-            <Text className="text-sm font-medium text-green-700">
-              {volunteer.phone}
+          <View className="flex-row items-center gap-2">
+            <Text
+              numberOfLines={1}
+              className="shrink text-base font-semibold text-gray-900"
+            >
+              {name}
             </Text>
-          </Pressable>
-        </View>
+            {minor && (
+              <View className="rounded-full bg-gray-900 px-2 py-0.5">
+                <Text className="text-xs font-semibold text-white">
+                  Under 18
+                </Text>
+              </View>
+            )}
+          </View>
+          <View className="mt-0.5 flex-row items-center gap-2">
+            <Text className="text-sm text-gray-500">
+              {volunteer.gender === "brother" ? "Brother" : "Sister"} ·{" "}
+              {age !== null ? `${age}` : "Age not set"}
+            </Text>
+            <Pressable
+              onPress={() => Linking.openURL(`tel:${volunteer.phone}`)}
+              accessibilityRole="link"
+              hitSlop={8}
+            >
+              <Text className="text-sm font-medium text-green-700">
+                {volunteer.phone}
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+
+        <Pressable
+          onPress={onRemove}
+          disabled={busy}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${name}`}
+          hitSlop={8}
+          className="px-1 py-2"
+        >
+          <Text className="text-sm font-medium text-gray-500">Remove</Text>
+        </Pressable>
+
+        <PillButton
+          title={action.title}
+          variant={action.variant}
+          onPress={action.onPress}
+          loading={busy}
+          accessibilityLabel={`${action.title} ${name}`}
+        />
       </View>
 
-      <Pressable
-        onPress={onRemove}
-        disabled={busy}
-        accessibilityRole="button"
-        accessibilityLabel={`Remove ${name}`}
-        hitSlop={8}
-        className="px-1 py-2"
-      >
-        <Text className="text-sm font-medium text-gray-500">Remove</Text>
-      </Pressable>
-
-      <PillButton
-        title={action.title}
-        variant={action.variant}
-        onPress={action.onPress}
-        loading={busy}
-        accessibilityLabel={`${action.title} ${name}`}
-      />
+      {expanded && (
+        <View className="mt-3 gap-3 rounded-xl bg-gray-50 px-4 py-3">
+          <View className="flex-row gap-4">
+            <Text className="w-24 text-sm text-gray-500">Date of birth</Text>
+            <Text className="flex-1 text-sm text-gray-900">
+              {volunteer.dateOfBirth
+                ? `${formatDateOfBirth(volunteer.dateOfBirth)} (${age})`
+                : "Not provided yet"}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: "/admin/users/[id]",
+                params: { id: volunteer.userId },
+              })
+            }
+            accessibilityRole="link"
+            hitSlop={8}
+            className="flex-row items-center justify-between"
+          >
+            <Text className="text-sm font-semibold text-green-700">
+              View hours
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color="#15803d" />
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -127,6 +182,39 @@ export default function EventVolunteersScreen() {
   const [missing, setMissing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  // The server builds the CSV (escaping, under-18 flag); the app saves it to
+  // the cache and opens the share sheet.
+  const exportCsv = async () => {
+    try {
+      setExporting(true);
+      const { data, headers } = await api.get<string>(
+        `/events/${id}/volunteers.csv`,
+        { responseType: "text" },
+      );
+      const fileName =
+        /filename="([^"]+)"/.exec(String(headers["content-disposition"]))?.[1] ??
+        "volunteers.csv";
+      const file = new File(Paths.cache, fileName);
+      file.create({ overwrite: true });
+      file.write(data);
+
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert("Can't share", "Sharing isn't available on this device.");
+        return;
+      }
+      await Sharing.shareAsync(file.uri, {
+        mimeType: "text/csv",
+        UTI: "public.comma-separated-values-text",
+        dialogTitle: "Export volunteers",
+      });
+    } catch (error) {
+      Alert.alert("Couldn't export", apiErrorMessage(error, "Please try again."));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const loadVolunteers = useCallback(
     async (showSpinner = true) => {
@@ -297,15 +385,37 @@ export default function EventVolunteersScreen() {
         contentContainerClassName="gap-8 px-5 pb-10 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-1">
-          <Text className="text-3xl font-semibold text-gray-900">
-            Volunteers
-          </Text>
-          {volunteers.length > 0 && (
-            <Text className="text-sm text-gray-500">
-              {approved.length} of {volunteers.length} approved
+        <View className="gap-3">
+          <View className="gap-1">
+            <Text className="text-3xl font-semibold text-gray-900">
+              Volunteers
             </Text>
-          )}
+            {volunteers.length > 0 && (
+              <Text className="text-sm text-gray-500">
+                {approved.length} of {volunteers.length} approved
+              </Text>
+            )}
+          </View>
+          <View className="flex-row gap-2">
+            <PillButton
+              title="Edit event"
+              variant="outline"
+              onPress={() =>
+                router.push({
+                  pathname: "/admin/events/[id]/edit",
+                  params: { id },
+                })
+              }
+            />
+            {volunteers.length > 0 && (
+              <PillButton
+                title="Export CSV"
+                variant="outline"
+                onPress={exportCsv}
+                loading={exporting}
+              />
+            )}
+          </View>
         </View>
 
         {volunteers.length === 0 ? (

@@ -7,6 +7,9 @@ import { useSnackbar, useSnackbarOffset } from "@/context/SnackbarContext";
 import { Event } from "@/types";
 import { apiErrorMessage } from "@/utils/apiError";
 import { notifyEventsChanged } from "@/utils/eventsChanged";
+import { formatHours } from "@/utils/hours";
+import { openInMaps } from "@/utils/maps";
+import { Ionicons } from "@expo/vector-icons";
 import { isAxiosError } from "axios";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
@@ -36,6 +39,29 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <Text className="w-16 text-sm text-gray-500">{label}</Text>
       <Text className="flex-1 text-base text-gray-900">{value}</Text>
     </View>
+  );
+}
+
+// The location, tappable to open it in the maps app.
+function LocationRow({ location }: { location: string }) {
+  return (
+    <Pressable
+      onPress={() => openInMaps(location)}
+      accessibilityRole="link"
+      accessibilityHint="Opens this location in your maps app"
+      className="flex-row gap-4"
+    >
+      <Text className="w-16 text-sm text-gray-500">Where</Text>
+      <View className="flex-1">
+        <Text className="text-base text-gray-900">{location}</Text>
+        <View className="mt-1 flex-row items-center gap-1">
+          <Ionicons name="navigate-outline" size={14} color="#15803d" />
+          <Text className="text-sm font-semibold text-green-700">
+            Open in Maps
+          </Text>
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -91,13 +117,27 @@ export default function EventDetailsScreen() {
     if (event.myStatus === "approved") {
       return {
         disabled: true,
-        label: `Hours confirmed (+${event.hours} hrs)`,
+        label: `Hours confirmed (+${formatHours(event.myHours ?? event.hours)})`,
         reason: "",
       };
     }
 
     if (event.myStatus === "registered") {
+      if (now >= start) {
+        return { disabled: true, label: "Event has started", reason: "" };
+      }
+
       if (now >= cancelLock) {
+        // The date moved after they signed up, so the lock doesn't apply.
+        if (event.myCancelLockWaived) {
+          return {
+            disabled: false,
+            label: "Cancel registration",
+            reason:
+              "The date changed after you signed up, so you can still cancel.",
+          };
+        }
+
         return {
           disabled: true,
           label: "Cancellation locked",
@@ -244,14 +284,32 @@ export default function EventDetailsScreen() {
           </Text>
         </View>
 
+        {(registered || approved) && event.previousDate && (
+          <View className="flex-row gap-3 rounded-xl border border-gray-200 px-4 py-3">
+            <Ionicons name="calendar-outline" size={18} color="#111827" />
+            <Text className="flex-1 text-sm text-gray-900">
+              The date changed. It was {formatDate(event.previousDate)}.
+            </Text>
+          </View>
+        )}
+
         <View className="gap-4 rounded-2xl bg-gray-50 p-5">
           <DetailRow label="When" value={formatDate(event.date)} />
-          <DetailRow label="Where" value={event.location} />
+          <LocationRow location={event.location} />
           <DetailRow
             label="Hours"
             value={`${event.hours} volunteer ${event.hours === 1 ? "hour" : "hours"}`}
           />
         </View>
+
+        {event.description ? (
+          <View className="gap-3">
+            <SectionHeader title="Details" />
+            <Text className="text-base leading-6 text-gray-900">
+              {event.description}
+            </Text>
+          </View>
+        ) : null}
 
         {(event.brothersMax > 0 || event.sistersMax > 0) && (
           <View className="gap-3">

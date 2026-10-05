@@ -6,8 +6,10 @@ import {
   deleteEvent,
   getDeletedEvents,
   getEvent,
+  getEventForEdit,
   getEventVolunteers,
   getRemovedVolunteers,
+  getVolunteersCsv,
   listEvents,
   registerForEvent,
   removeVolunteer,
@@ -15,18 +17,13 @@ import {
   restoreVolunteer,
   undoCancelRegistration,
   unapproveVolunteer,
+  updateEvent,
 } from "../controllers/eventController.js";
 import { adminOnly, auth } from "../middleware/auth.js";
-import { validateBody } from "../middleware/validate.js";
-import { createEventSchema, objectId } from "../validators/eventValidator.js";
+import { requireObjectId, validateBody } from "../middleware/validate.js";
+import { createEventSchema } from "../validators/eventValidator.js";
 
 const router = express.Router();
-
-// Malformed ids can never match a document, so answer 404 instead of a 500 CastError.
-const requireObjectId = (message) => (req, res, next, value) =>
-  objectId.safeParse(value).success
-    ? next()
-    : res.status(404).json({ message });
 
 router.use(auth);
 
@@ -38,12 +35,15 @@ router.get("/", listEvents);
 router.get("/deleted", adminOnly, getDeletedEvents);
 router.get("/:id", getEvent);
 router.post("/", adminOnly, validateBody(createEventSchema), createEvent);
+router.patch("/:id", adminOnly, validateBody(createEventSchema), updateEvent);
+router.get("/:id/edit", adminOnly, getEventForEdit);
 router.delete("/:id", adminOnly, deleteEvent);
 router.post("/:id/restore", adminOnly, restoreEvent);
 router.post("/:id/register", registerForEvent);
 router.delete("/:id/register", cancelRegistration);
 router.post("/:id/register/undo", undoCancelRegistration);
 router.get("/:id/volunteers", adminOnly, getEventVolunteers);
+router.get("/:id/volunteers.csv", adminOnly, getVolunteersCsv);
 router.patch("/:id/volunteers/:userId/approve", adminOnly, approveVolunteer);
 router.patch("/:id/volunteers/:userId/unapprove", adminOnly, unapproveVolunteer);
 router.get("/:id/volunteers/removed", adminOnly, getRemovedVolunteers);

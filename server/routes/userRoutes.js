@@ -1,10 +1,62 @@
 import express from "express";
-import { createUser, deleteMyAccount } from "../controllers/userController.js";
-import { auth } from "../middleware/auth.js"; // adjust to your middleware file name
+import {
+  createAdjustment,
+  getMyHours,
+  getMyHoursSummary,
+  getUserHours,
+} from "../controllers/hoursController.js";
+import {
+  changeMyPassword,
+  createUser,
+  deleteMyAccount,
+  setMyDateOfBirth,
+  updateMyProfile,
+} from "../controllers/userController.js";
+import { adminOnly, auth } from "../middleware/auth.js";
+import { requireObjectId, validateBody } from "../middleware/validate.js";
+import {
+  changePasswordSchema,
+  hourAdjustmentSchema,
+  setDateOfBirthSchema,
+  updateProfileSchema,
+} from "../validators/userValidator.js";
 
-const router = express.Router();
+export const createUserRoutes = ({ passwordLimiter }) => {
+  const router = express.Router();
 
-router.post("/", createUser);
-router.delete("/me", auth, deleteMyAccount);
+  router.param("id", requireObjectId("Volunteer not found"));
 
-export default router;
+  router.post("/", createUser);
+
+  // /me routes act on req.user from the token, so users can only ever
+  // change themselves. They're declared before the admin /:id routes.
+  router.patch("/me", auth, validateBody(updateProfileSchema), updateMyProfile);
+  router.put(
+    "/me/password",
+    auth,
+    passwordLimiter,
+    validateBody(changePasswordSchema),
+    changeMyPassword,
+  );
+  router.put(
+    "/me/date-of-birth",
+    auth,
+    validateBody(setDateOfBirthSchema),
+    setMyDateOfBirth,
+  );
+  router.get("/me/hours", auth, getMyHours);
+  router.get("/me/hours/summary", auth, getMyHoursSummary);
+  router.delete("/me", auth, deleteMyAccount);
+
+  // Admin only: read another user's hours and adjust them.
+  router.get("/:id/hours", auth, adminOnly, getUserHours);
+  router.post(
+    "/:id/hour-adjustments",
+    auth,
+    adminOnly,
+    validateBody(hourAdjustmentSchema),
+    createAdjustment,
+  );
+
+  return router;
+};

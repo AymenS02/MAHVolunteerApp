@@ -29,6 +29,11 @@ const userSchema = new mongoose.Schema(
       default: 0,
     },
     highschoolStudent: { type: Boolean, default: false },
+    // UTC midnight of the birth day. Not required here: accounts created
+    // before this field existed must keep saving. Registration requires it.
+    // select: false so it's only loaded where it's explicitly requested
+    // (the user's own record and admin endpoints).
+    dateOfBirth: { type: Date, select: false },
     // Bumped to invalidate every token issued to this user.
     tokenVersion: { type: Number, default: 0 },
   },

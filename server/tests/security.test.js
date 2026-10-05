@@ -93,6 +93,7 @@ describe("rate limits", () => {
         password: "Password1",
         phone: "5555550100",
         gender: "brother",
+        dateOfBirth: "2000-01-01",
       });
 
     for (let n = 0; n < 5; n++) {
@@ -151,6 +152,20 @@ describe("validation", () => {
     const vol = await api.call(admin, "PATCH", `/api/events/${"a".repeat(24)}/volunteers/nope/approve`);
     assert.equal(vol.status, 404);
     assert.equal(vol.body.message, "Volunteer not found");
+  });
+
+  test("unknown routes and malformed JSON answer JSON, not HTML", async () => {
+    const missing = await api.call(admin, "GET", "/api/nope");
+    assert.equal(missing.status, 404);
+    assert.deepEqual(missing.body, { message: "Not found" });
+
+    const res = await fetch(`${api.base}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{not json",
+    });
+    assert.equal(res.status, 400);
+    assert.deepEqual(await res.json(), { message: "Invalid request" });
   });
 
   test("login without a password keeps the { message } shape the app reads", async () => {

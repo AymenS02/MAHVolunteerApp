@@ -1,3 +1,12 @@
+import { objectId } from "../validators/eventValidator.js";
+
+// For router.param: malformed ids can never match a document, so answer 404
+// instead of letting Mongoose throw a CastError (500).
+export const requireObjectId = (message) => (req, res, next, value) =>
+  objectId.safeParse(value).success
+    ? next()
+    : res.status(404).json({ message });
+
 // Replaces req.body with the parsed data, or answers 400. Pass `message` to
 // answer { message } instead of { message, errors } for screens that only
 // read `message`.

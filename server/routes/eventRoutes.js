@@ -17,14 +17,16 @@ import {
   unapproveVolunteer,
 } from "../controllers/eventController.js";
 import { adminOnly, auth } from "../middleware/auth.js";
+import { validateBody } from "../middleware/validate.js";
+import { createEventSchema, objectId } from "../validators/eventValidator.js";
 
 const router = express.Router();
 
-const objectIdPattern = /^[a-f\d]{24}$/i;
-
 // Malformed ids can never match a document, so answer 404 instead of a 500 CastError.
 const requireObjectId = (message) => (req, res, next, value) =>
-  objectIdPattern.test(value) ? next() : res.status(404).json({ message });
+  objectId.safeParse(value).success
+    ? next()
+    : res.status(404).json({ message });
 
 router.use(auth);
 
@@ -35,7 +37,7 @@ router.get("/", listEvents);
 // Must come before "/:id" so "deleted" isn't read as an event id.
 router.get("/deleted", adminOnly, getDeletedEvents);
 router.get("/:id", getEvent);
-router.post("/", adminOnly, createEvent);
+router.post("/", adminOnly, validateBody(createEventSchema), createEvent);
 router.delete("/:id", adminOnly, deleteEvent);
 router.post("/:id/restore", adminOnly, restoreEvent);
 router.post("/:id/register", registerForEvent);

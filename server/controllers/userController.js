@@ -1,10 +1,7 @@
-import jwt from "jsonwebtoken";
 import Event from "../models/Event.js";
 import User from "../models/User.js";
+import { signToken } from "../utils/token.js";
 import { createUserSchema } from "../validators/userValidator.js";
-
-const signToken = (userId) =>
-  jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "30d" });
 
 export const createUser = async (req, res) => {
   try {
@@ -47,7 +44,7 @@ export const createUser = async (req, res) => {
       highschoolStudent,
     });
 
-    const token = signToken(newUser._id.toString());
+    const token = signToken(newUser);
 
     return res.status(201).json({ token, user: newUser.toJSON() });
   } catch (error) {

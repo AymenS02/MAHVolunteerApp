@@ -1,7 +1,16 @@
-import api from "@/constants/api";
+import api, { setUnauthorizedHandler } from "@/constants/api";
 import { User } from "@/types";
+import { isAxiosError } from "axios";
+import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
 type RegisterInput = {
@@ -51,8 +60,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           headers: { Authorization: "Bearer " + savedToken },
         });
         setUser(data);
-      } catch {
-        await SecureStore.deleteItemAsync("auth_token");
+      } catch (error) {
+        // Only a rejected token ends the session. Offline or server errors
+        // keep it so the next launch can sign in again automatically.
+        if (isAxiosError(error) && error.response?.status === 401) {
+          await SecureStore.deleteItemAsync("auth_token");
+        }
         setToken(null);
         setUser(null);
       } finally {
@@ -61,6 +74,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     restore();
+  }, []);
+
+  // Any 401 outside login/register means the token is no longer valid.
+  const signedInRef = useRef(false);
+  const sessionExpiredRef = useRef(false);
+
+  useEffect(() => {
+    signedInRef.current = !!user;
+
+    // Navigate after the render that drops the user, so the protected-route
+    // guard has already switched to the signed-out screens.
+    if (!user && sessionExpiredRef.current) {
+      sessionExpiredRef.current = false;
+      router.replace("/login");
+    }
+  }, [user]);
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      // Nobody signed in (startup check, or already handled): nothing to do.
+      if (!signedInRef.current) return;
+      signedInRef.current = false;
+      sessionExpiredRef.current = true;
+      SecureStore.deleteItemAsync("auth_token").finally(() => {
+        setToken(null);
+        setUser(null);
+      });
+    });
+    return () => setUnauthorizedHandler(null);
   }, []);
 
   const value = useMemo<AuthContextValue>(() => {

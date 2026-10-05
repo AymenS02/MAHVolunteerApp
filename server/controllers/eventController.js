@@ -1,40 +1,6 @@
 import mongoose from "mongoose";
-import { z } from "zod";
 import Event from "../models/Event.js";
 import User from "../models/User.js";
-
-const eventInputSchema = z
-  .object({
-    name: z.string().min(1),
-    date: z.coerce.date(),
-    location: z.string().min(1),
-    hours: z.number().nonnegative(),
-    brothersMax: z.number().int().min(0),
-    sistersMax: z.number().int().min(0),
-    brothersContact: z
-      .object({ name: z.string().min(1), phone: z.string().min(1) })
-      .optional(),
-    sistersContact: z
-      .object({ name: z.string().min(1), phone: z.string().min(1) })
-      .optional(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.brothersMax > 0 && !data.brothersContact) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["brothersContact"],
-        message: "Brothers contact is required when brothers needed is greater than 0",
-      });
-    }
-
-    if (data.sistersMax > 0 && !data.sistersContact) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["sistersContact"],
-        message: "Sisters contact is required when sisters needed is greater than 0",
-      });
-    }
-  });
 
 const EVENT_DELETED = "This event was deleted";
 
@@ -52,37 +18,34 @@ const inTransaction = async (fn) => {
   return result;
 };
 
-const formatEventForUser = (event, userId, userGender) => {
-  const eventObj = event.toObject();
-  const brothersRegistered = eventObj.volunteers.filter(
-    (v) => v.gender === "brother",
-  ).length;
-  const sistersRegistered = eventObj.volunteers.filter(
-    (v) => v.gender === "sister",
-  ).length;
-  const myEntry = eventObj.volunteers.find((v) => v.user.toString() === userId);
+const countGender = (event, gender) =>
+  event.volunteers.filter((v) => v.gender === gender).length;
 
-  delete eventObj.removedVolunteers;
+// Built field by field so volunteer data, admin fields and anything added to
+// the model later never reach non-admin clients by accident.
+const formatEventForUser = (event, userId, userGender) => {
+  const myEntry = event.volunteers.find((v) => v.user.toString() === userId);
 
   const response = {
-    ...eventObj,
-    brothersRegistered,
-    sistersRegistered,
+    _id: event._id,
+    name: event.name,
+    date: event.date,
+    location: event.location,
+    hours: event.hours,
+    brothersMax: event.brothersMax,
+    sistersMax: event.sistersMax,
+    deletedAt: event.deletedAt ?? null,
+    brothersRegistered: countGender(event, "brother"),
+    sistersRegistered: countGender(event, "sister"),
     myStatus: myEntry?.status ?? null,
   };
 
-  if (!myEntry) {
-    delete response.brothersContact;
-    delete response.sistersContact;
-    return response;
-  }
+  // Registered volunteers see only their own group's contact.
+  const contactKey = `${userGender}sContact`;
+  const contact = event[contactKey];
 
-  if (userGender === "brother") {
-    delete response.sistersContact;
-  }
-
-  if (userGender === "sister") {
-    delete response.brothersContact;
+  if (myEntry && contact?.name) {
+    response[contactKey] = { name: contact.name, phone: contact.phone };
   }
 
   return response;
@@ -119,13 +82,8 @@ export const getEvent = async (req, res) => {
 
 export const createEvent = async (req, res) => {
   try {
-    const parsed = eventInputSchema.safeParse(req.body);
-
-    if (!parsed.success) {
-      return res.status(400).json({ errors: parsed.error.issues });
-    }
-
-    const event = await Event.create(parsed.data);
+    // Body is validated by createEventSchema in the route.
+    const event = await Event.create(req.body);
     return res.status(201).json(event);
   } catch (error) {
     return res.status(500).json({ message: error.message });

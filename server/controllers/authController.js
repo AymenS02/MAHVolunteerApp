@@ -1,24 +1,16 @@
-import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { signToken } from "../utils/token.js";
 import { createUser } from "./userController.js";
-
-const signToken = (userId) =>
-  jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "30d" });
 
 export const register = createUser;
 
+// Body is validated by loginSchema in the route.
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required" });
-    }
-
     const user = await User.findOne({
-      email: email.trim().toLowerCase(),
+      email: email.toLowerCase(),
     }).select("+password");
 
     if (!user) {
@@ -31,7 +23,7 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const token = signToken(user._id.toString());
+    const token = signToken(user);
 
     return res.json({ token, user: user.toJSON() });
   } catch (error) {

@@ -29,12 +29,15 @@ const userSchema = new mongoose.Schema(
       default: 0,
     },
     highschoolStudent: { type: Boolean, default: false },
+    // Bumped to invalidate every token issued to this user.
+    tokenVersion: { type: Number, default: 0 },
   },
   {
     timestamps: true,
     toJSON: {
       transform: (_doc, ret) => {
         delete ret.password;
+        delete ret.tokenVersion;
         return ret;
       },
     },

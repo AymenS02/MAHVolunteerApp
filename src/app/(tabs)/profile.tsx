@@ -6,6 +6,7 @@ import api from "@/constants/api";
 import { useAuth } from "@/context/AuthContext";
 import { useSnackbarOffset } from "@/context/SnackbarContext";
 import { HoursHistory } from "@/types";
+import { apiErrorMessage } from "@/utils/apiError";
 import { formatDateOfBirth, getAge } from "@/utils/dateOfBirth";
 import {
   getPermission,
@@ -55,10 +56,11 @@ function LinkRow({ label, href }: { label: string; href: Href }) {
     <Pressable
       onPress={() => router.push(href)}
       accessibilityRole="button"
+      accessibilityLabel={label}
       className="flex-row items-center justify-between border-b border-gray-100 py-4 active:bg-gray-50"
     >
       <Text className="text-base text-gray-900">{label}</Text>
-      <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+      <Ionicons name="chevron-forward" size={18} color="#6b7280" />
     </Pressable>
   );
 }
@@ -100,8 +102,11 @@ export default function ProfileScreen() {
           ],
         );
       }
-    } catch {
-      Alert.alert("Error", "Could not update notifications");
+    } catch (error) {
+      Alert.alert(
+        "Couldn't update notifications",
+        apiErrorMessage(error, "Please try again."),
+      );
     } finally {
       setSavingNotifications(false);
     }
@@ -111,7 +116,7 @@ export default function ProfileScreen() {
     try {
       await logout();
     } catch {
-      Alert.alert("Error", "Could not log out");
+      Alert.alert("Couldn't log out", "Please try again.");
     }
   };
 
@@ -127,16 +132,10 @@ export default function ProfileScreen() {
           onPress: async () => {
             try {
               await deleteAccount();
-            } catch (error: any) {
-              console.log(
-                "[DELETE ACCOUNT] error:",
-                error?.response?.status,
-                error?.response?.data,
-              );
+            } catch (error) {
               Alert.alert(
-                "Error",
-                error?.response?.data?.message ??
-                  "Could not delete your account",
+                "Couldn't delete your account",
+                apiErrorMessage(error, "Please try again."),
               );
             }
           },
@@ -155,8 +154,17 @@ export default function ProfileScreen() {
       showsVerticalScrollIndicator={false}
     >
       <View className="items-center">
-        <View className="h-20 w-20 items-center justify-center rounded-full bg-green-100">
-          <Text className="text-2xl font-semibold text-green-800">
+        {/* Decorative: the name is right below. */}
+        <View
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
+          className="h-20 w-20 items-center justify-center rounded-full bg-green-100"
+        >
+          <Text
+            maxFontSizeMultiplier={1.3}
+            className="text-2xl font-semibold text-green-800"
+          >
             {initials}
           </Text>
         </View>
@@ -179,7 +187,8 @@ export default function ProfileScreen() {
           <SectionHeader title="Hours history" />
           <HoursHistoryList
             items={history.items}
-            emptyText="Hours appear here once an organizer approves an event you attended."
+            emptyTitle="No hours yet"
+            emptyHint="Hours appear here once an organizer approves an event you attended."
           />
         </View>
       )}
@@ -213,8 +222,8 @@ export default function ProfileScreen() {
           value={user.notificationsEnabled !== false}
           onValueChange={toggleNotifications}
           disabled={savingNotifications}
-          trackColor={{ false: "#969a9e", true: "#15803d" }}
-          ios_backgroundColor="#969a9e"
+          trackColor={{ false: "#6b7280", true: "#15803d" }}
+          ios_backgroundColor="#6b7280"
           thumbColor="#ffffff"
           accessibilityLabel="Notifications"
         />

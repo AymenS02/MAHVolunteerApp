@@ -1,18 +1,20 @@
 import Button from "@/components/Button";
 import EventCard from "@/components/EventCard";
 import PillButton from "@/components/PillButton";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ScreenState";
 import SectionHeader from "@/components/SectionHeader";
 import api from "@/constants/api";
 import { useAuth } from "@/context/AuthContext";
 import { useSnackbar, useSnackbarOffset } from "@/context/SnackbarContext";
+import { useScreenData } from "@/hooks/use-screen-data";
 import { Event } from "@/types";
 import { apiErrorMessage } from "@/utils/apiError";
 import { onEventsChanged } from "@/utils/eventsChanged";
 import { formatDate } from "@/utils/format";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useBottomTabBarHeight } from "expo-router/tabs";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
+import { Alert, RefreshControl, ScrollView, Text, View } from "react-native";
 
 function DeletedEventRow({
   event,
@@ -44,86 +46,77 @@ function DeletedEventRow({
   );
 }
 
+type AdminEvents = { events: Event[]; deleted: Event[] };
+
 export default function AdminTabScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const { show } = useSnackbar();
-  const [events, setEvents] = useState<Event[]>([]);
-  const [deleted, setDeleted] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   useSnackbarOffset(useBottomTabBarHeight());
+  const isAdmin = user?.role === "admin";
 
-  const loadEvents = useCallback(
-    async (showSpinner = true) => {
-      if (user?.role !== "admin") {
-        return;
-      }
+  const fetchEvents = useCallback(async (): Promise<AdminEvents> => {
+    if (!isAdmin) return { events: [], deleted: [] };
+    const [live, gone] = await Promise.all([
+      api.get<Event[]>("/events"),
+      api.get<Event[]>("/events/deleted"),
+    ]);
+    return { events: live.data, deleted: gone.data };
+  }, [isAdmin]);
 
-      try {
-        if (showSpinner) setLoading(true);
-        const [live, gone] = await Promise.all([
-          api.get<Event[]>("/events"),
-          api.get<Event[]>("/events/deleted"),
-        ]);
-        setEvents(live.data);
-        setDeleted(gone.data);
-      } catch (error) {
-        Alert.alert("Error", apiErrorMessage(error, "Failed to load events"));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [user?.role],
-  );
+  const { data, loading, error, refreshing, reload, refresh, retry } =
+    useScreenData(fetchEvents);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadEvents();
-    }, [loadEvents]),
-  );
-
-  useEffect(() => onEventsChanged(() => loadEvents(false)), [loadEvents]);
+  useEffect(() => onEventsChanged(() => reload()), [reload]);
 
   const restoreEvent = async (event: Event) => {
     try {
       setRestoringId(event._id);
       await api.post(`/events/${event._id}/restore`);
-      await loadEvents(false);
+      await reload();
       show({ message: "Event restored" });
-    } catch (error) {
-      Alert.alert("Error", apiErrorMessage(error, "Failed to restore event"));
+    } catch (err) {
+      Alert.alert("Couldn't restore event", apiErrorMessage(err, "Please try again."));
     } finally {
       setRestoringId(null);
     }
   };
 
-  if (user?.role !== "admin") {
+  if (!isAdmin) {
     return (
-      <View className="flex-1 items-center justify-center bg-white px-8">
-        <Text className="text-base font-semibold text-gray-900">
-          Admins only
-        </Text>
-        <Text className="mt-1 text-center text-sm text-gray-500">
-          You need an admin account to manage events.
-        </Text>
+      <View className="flex-1 bg-white">
+        <EmptyState
+          title="Admins only"
+          hint="You need an admin account to manage events."
+        />
       </View>
     );
   }
 
-  if (loading) {
+  if (loading || !data) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator color="#15803d" />
+      <View className="flex-1 bg-white">
+        {error ? <ErrorState message={error} onRetry={retry} /> : <LoadingState />}
       </View>
     );
   }
+
+  const { events, deleted } = data;
 
   return (
     <ScrollView
       className="flex-1 bg-white"
       contentContainerClassName="gap-6 px-5 pb-10 pt-4"
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={refresh}
+          tintColor="#15803d"
+          colors={["#15803d"]}
+        />
+      }
     >
       <Button
         title="Create event"
@@ -141,14 +134,10 @@ export default function AdminTabScreen() {
         </View>
 
         {events.length === 0 ? (
-          <View className="items-center px-8 py-16">
-            <Text className="text-base font-semibold text-gray-900">
-              No events yet
-            </Text>
-            <Text className="mt-1 text-center text-sm text-gray-500">
-              Create your first event and volunteers can start signing up.
-            </Text>
-          </View>
+          <EmptyState
+            title="No events yet"
+            hint="Create your first event and volunteers can start signing up."
+          />
         ) : (
           events.map((event) => (
             <EventCard

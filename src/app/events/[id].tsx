@@ -1,9 +1,11 @@
 import BackBar from "@/components/BackBar";
 import Button from "@/components/Button";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ScreenState";
 import SectionHeader from "@/components/SectionHeader";
 import api from "@/constants/api";
 import { useAuth } from "@/context/AuthContext";
 import { useSnackbar, useSnackbarOffset } from "@/context/SnackbarContext";
+import { useScreenData } from "@/hooks/use-screen-data";
 import { Event, EventMessage } from "@/types";
 import { apiErrorMessage } from "@/utils/apiError";
 import { notifyEventsChanged } from "@/utils/eventsChanged";
@@ -12,10 +14,9 @@ import { openInMaps } from "@/utils/maps";
 import { offerNotificationsOnce } from "@/utils/push";
 import { Ionicons } from "@expo/vector-icons";
 import { isAxiosError } from "axios";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Linking,
   Pressable,
@@ -37,7 +38,7 @@ const formatDate = (date: string) =>
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-row gap-4">
-      <Text className="w-16 text-sm text-gray-500">{label}</Text>
+      <Text className="min-w-[64px] text-sm text-gray-500">{label}</Text>
       <Text className="flex-1 text-base text-gray-900">{value}</Text>
     </View>
   );
@@ -49,10 +50,11 @@ function LocationRow({ location }: { location: string }) {
     <Pressable
       onPress={() => openInMaps(location)}
       accessibilityRole="link"
+      accessibilityLabel={`Location: ${location}`}
       accessibilityHint="Opens this location in your maps app"
       className="flex-row gap-4"
     >
-      <Text className="w-16 text-sm text-gray-500">Where</Text>
+      <Text className="min-w-[64px] text-sm text-gray-500">Where</Text>
       <View className="flex-1">
         <Text className="text-base text-gray-900">{location}</Text>
         <View className="mt-1 flex-row items-center gap-1">
@@ -66,52 +68,53 @@ function LocationRow({ location }: { location: string }) {
   );
 }
 
+type Detail = {
+  // null when the event was removed or doesn't exist.
+  event: Event | null;
+  messages: EventMessage[];
+  loadedAt: number;
+};
+
 export default function EventDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const [event, setEvent] = useState<Event | null>(null);
-  const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [now, setNow] = useState(0);
-  const [missing, setMissing] = useState(false);
-  const [messages, setMessages] = useState<EventMessage[]>([]);
   const [actionBarHeight, setActionBarHeight] = useState(0);
   const { show } = useSnackbar();
   useSnackbarOffset(actionBarHeight);
 
-  const loadEvent = useCallback(async () => {
+  const fetchEvent = useCallback(async (): Promise<Detail> => {
     try {
-      setLoading(true);
-      const { data } = await api.get<Event>(`/events/${id}`);
-      setEvent(data);
+      const { data: event } = await api.get<Event>(`/events/${id}`);
 
       // Organizer messages are for people signed up or waiting.
-      if (data.myStatus || data.myWaitlistPosition) {
-        api
+      let messages: EventMessage[] = [];
+      if (event.myStatus || event.myWaitlistPosition) {
+        messages = await api
           .get<EventMessage[]>(`/events/${id}/messages`)
-          .then(({ data: list }) => setMessages(list))
-          .catch(() => setMessages([]));
-      } else {
-        setMessages([]);
+          .then(({ data }) => data)
+          .catch(() => []);
       }
-      setMissing(false);
-      setNow(Date.now());
+
+      return { event, messages, loadedAt: Date.now() };
     } catch (error) {
       if (isAxiosError(error) && error.response?.status === 404) {
-        setMissing(true);
-      } else {
-        Alert.alert("Error", apiErrorMessage(error, "Failed to load event"));
+        return { event: null, messages: [], loadedAt: Date.now() };
       }
-    } finally {
-      setLoading(false);
+      throw error;
     }
   }, [id]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadEvent();
-    }, [loadEvent]),
-  );
+  const { data, setData, loading, error, reload, retry } =
+    useScreenData(fetchEvent);
+  const event = data?.event ?? null;
+  const messages = data?.messages ?? [];
+  // When the data was loaded, for time-based states (started, cancel lock).
+  const now = data?.loadedAt ?? 0;
+
+  // Actions return the updated event; show it without a reload.
+  const setEvent = (next: Event) =>
+    setData((prev) => (prev ? { ...prev, event: next, loadedAt: Date.now() } : prev));
 
   type Action = "register" | "cancel" | "join" | "leave" | null;
 
@@ -254,8 +257,8 @@ export default function EventDetailsScreen() {
                 notifyEventsChanged();
               } catch (error) {
                 Alert.alert(
-                  "Error",
-                  apiErrorMessage(error, "Failed to leave the waitlist"),
+                  "Couldn't leave the waitlist",
+                  apiErrorMessage(error, "Please try again."),
                 );
               } finally {
                 setActionLoading(false);
@@ -280,8 +283,8 @@ export default function EventDetailsScreen() {
             : "A spot opened up. You're registered!",
         });
       } catch (error) {
-        Alert.alert("Error", apiErrorMessage(error, "Failed to join the waitlist"));
-        await loadEvent();
+        Alert.alert("Couldn't join the waitlist", apiErrorMessage(error, "Please try again."));
+        await reload();
       } finally {
         setActionLoading(false);
       }
@@ -311,8 +314,8 @@ export default function EventDetailsScreen() {
         });
       } catch (error) {
         Alert.alert(
-          "Error",
-          apiErrorMessage(error, "Failed to cancel registration"),
+          "Couldn't cancel registration",
+          apiErrorMessage(error, "Please try again."),
         );
       } finally {
         setActionLoading(false);
@@ -323,41 +326,32 @@ export default function EventDetailsScreen() {
     try {
       setActionLoading(true);
       await api.post(`/events/${event._id}/register`);
-      await loadEvent();
+      await reload();
       // A good moment to offer reminders (asked once).
       offerNotificationsOnce();
     } catch (error) {
       // E.g. the last spot was taken a moment ago: show the waitlist option.
-      Alert.alert("Error", apiErrorMessage(error, "Request failed"));
-      await loadEvent();
+      Alert.alert("Couldn't register", apiErrorMessage(error, "Please try again."));
+      await reload();
     } finally {
       setActionLoading(false);
     }
   };
 
-  if (missing) {
+  if (loading || !data || !event) {
     return (
       <View className="flex-1 bg-white">
         <BackBar />
-        <View className="flex-1 items-center justify-center px-8">
-          <Text className="text-base font-semibold text-gray-900">
-            Event not available
-          </Text>
-          <Text className="mt-1 text-center text-sm text-gray-500">
-            This event was removed or no longer exists.
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  if (loading || !event) {
-    return (
-      <View className="flex-1 bg-white">
-        <BackBar />
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#15803d" />
-        </View>
+        {data && !event ? (
+          <EmptyState
+            title="Event not available"
+            hint="This event was removed or no longer exists."
+          />
+        ) : error ? (
+          <ErrorState message={error} onRetry={retry} />
+        ) : (
+          <LoadingState />
+        )}
       </View>
     );
   }
@@ -405,14 +399,14 @@ export default function EventDetailsScreen() {
               </Text>
             </View>
           )}
-          <Text className="text-3xl font-semibold text-gray-900">
+          <Text accessibilityRole="header" className="text-3xl font-semibold text-gray-900">
             {event.name}
           </Text>
         </View>
 
         {registered && event.myPromotedAt && (
           <View className="flex-row gap-3 rounded-xl bg-green-50 px-4 py-3">
-            <Ionicons name="checkmark-circle" size={18} color="#15803d" />
+            <Ionicons name="checkmark-circle" size={18} color="#15803d" accessible={false} importantForAccessibility="no" />
             <Text className="flex-1 text-sm text-green-800">
               You got a spot from the waitlist.
             </Text>
@@ -421,7 +415,7 @@ export default function EventDetailsScreen() {
 
         {(registered || approved || waitlisted) && event.previousDate && (
           <View className="flex-row gap-3 rounded-xl border border-gray-200 px-4 py-3">
-            <Ionicons name="calendar-outline" size={18} color="#111827" />
+            <Ionicons name="calendar-outline" size={18} color="#111827" accessible={false} importantForAccessibility="no" />
             <Text className="flex-1 text-sm text-gray-900">
               The date changed. It was {formatDate(event.previousDate)}.
             </Text>
@@ -494,7 +488,8 @@ export default function EventDetailsScreen() {
               <Pressable
                 onPress={() => Linking.openURL(`tel:${userContact.phone}`)}
                 accessibilityRole="link"
-                hitSlop={8}
+                accessibilityLabel={`Call ${userContact.name}, ${userContact.phone}`}
+                hitSlop={12}
               >
                 <Text className="text-base font-semibold text-green-700">
                   {userContact.phone}

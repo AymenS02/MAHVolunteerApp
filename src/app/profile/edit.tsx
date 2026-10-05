@@ -103,7 +103,7 @@ export default function EditProfileScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text className="text-3xl font-semibold text-gray-900">
+          <Text accessibilityRole="header" className="text-3xl font-semibold text-gray-900">
             Edit profile
           </Text>
 

@@ -76,7 +76,7 @@ export default function ChangePasswordScreen() {
       onPress={() => setShowPasswords((prev) => !prev)}
       accessibilityRole="button"
       accessibilityLabel={showPasswords ? "Hide passwords" : "Show passwords"}
-      hitSlop={8}
+      hitSlop={12}
     >
       <Ionicons
         name={showPasswords ? "eye-off-outline" : "eye-outline"}
@@ -99,7 +99,7 @@ export default function ChangePasswordScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-1">
-            <Text className="text-3xl font-semibold text-gray-900">
+            <Text accessibilityRole="header" className="text-3xl font-semibold text-gray-900">
               Change password
             </Text>
             <Text className="text-sm text-gray-500">

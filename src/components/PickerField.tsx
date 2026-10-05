@@ -25,13 +25,13 @@ export default function PickerField({
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={`${label}: ${value}`}
+        accessibilityLabel={`${label}: ${value}${error ? `, error: ${error}` : ""}`}
         className={`rounded-xl px-4 py-3.5 ${
           error ? "bg-red-50" : "bg-gray-50 active:bg-gray-100"
         }`}
       >
         <Text
-          className={`text-base ${placeholder ? "text-gray-400" : "text-gray-900"}`}
+          className={`text-base ${placeholder ? "text-gray-500" : "text-gray-900"}`}
         >
           {value}
         </Text>

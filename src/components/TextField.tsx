@@ -24,7 +24,8 @@ export default function TextField({
       <View className="justify-center">
         <TextInput
           ref={inputRef}
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor="#6b7280"
+          accessibilityLabel={error ? `${label}, error: ${error}` : label}
           className={`rounded-xl px-4 py-3.5 text-base text-gray-900 ${
             error ? "bg-red-50" : "bg-gray-50"
           } ${right ? "pr-12" : ""} ${props.multiline ? "min-h-[112px]" : ""}`}

@@ -176,7 +176,7 @@ export default function Register() {
         console.log("[REGISTER] Unknown error:", error);
       }
 
-      Alert.alert("Registration failed", message);
+      Alert.alert("Couldn't create your account", message);
     } finally {
       setLoading(false);
     }
@@ -196,7 +196,7 @@ export default function Register() {
           <Text className="text-sm font-semibold text-green-700">
             MAH Volunteer
           </Text>
-          <Text className="mt-3 text-4xl font-semibold text-gray-900">
+          <Text accessibilityRole="header" className="mt-3 text-4xl font-semibold text-gray-900">
             Create your account
           </Text>
           <Text className="mt-2 text-base text-gray-500">
@@ -288,7 +288,7 @@ export default function Register() {
                   accessibilityLabel={
                     showPassword ? "Hide password" : "Show password"
                   }
-                  hitSlop={8}
+                  hitSlop={12}
                 >
                   <Ionicons
                     name={showPassword ? "eye-off-outline" : "eye-outline"}
@@ -349,8 +349,8 @@ export default function Register() {
                 onValueChange={(value) =>
                   handleChange("highschoolStudent", value)
                 }
-                trackColor={{ false: "#969a9e", true: "#15803d" }}
-                ios_backgroundColor="#969a9e"
+                trackColor={{ false: "#6b7280", true: "#15803d" }}
+                ios_backgroundColor="#6b7280"
                 thumbColor="#ffffff"
               />
             </View>
@@ -365,7 +365,10 @@ export default function Register() {
           </View>
 
           <Link href="/login" asChild>
-            <Pressable className="mt-6 py-2" accessibilityRole="link">
+            <Pressable
+              className="mt-6 min-h-[44px] justify-center py-2"
+              accessibilityRole="link"
+            >
               <Text className="text-center text-gray-500">
                 Already have an account?
                 <Text className="font-semibold text-green-700"> Log in</Text>

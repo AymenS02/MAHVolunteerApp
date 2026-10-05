@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/ScreenState";
 import { HoursItem } from "@/types";
 import { formatHours, formatShortDate, formatSignedHours } from "@/utils/hours";
 import { Text, View } from "react-native";
@@ -13,13 +14,15 @@ function Note({ amount, reason }: { amount: number; reason: string }) {
 // The lines that add up to a volunteer's total, newest first.
 export default function HoursHistoryList({
   items,
-  emptyText,
+  emptyTitle,
+  emptyHint,
 }: {
   items: HoursItem[];
-  emptyText: string;
+  emptyTitle: string;
+  emptyHint?: string;
 }) {
   if (items.length === 0) {
-    return <Text className="py-4 text-sm text-gray-500">{emptyText}</Text>;
+    return <EmptyState title={emptyTitle} hint={emptyHint} />;
   }
 
   return (

@@ -1,12 +1,14 @@
 import BackBar from "@/components/BackBar";
 import Button from "@/components/Button";
 import HoursHistoryList from "@/components/HoursHistoryList";
+import { ErrorState, LoadingState } from "@/components/ScreenState";
 import SectionHeader from "@/components/SectionHeader";
 import StatCard from "@/components/StatCard";
 import TextField from "@/components/TextField";
 import api from "@/constants/api";
 import { useAuth } from "@/context/AuthContext";
 import { useSnackbar } from "@/context/SnackbarContext";
+import { useScreenData } from "@/hooks/use-screen-data";
 import { VolunteerHours } from "@/types";
 import { apiErrorMessage } from "@/utils/apiError";
 import { getAge } from "@/utils/dateOfBirth";
@@ -17,14 +19,14 @@ import {
 } from "@/utils/hours";
 import { fieldErrors } from "@/validation/account";
 import { adjustmentFormSchema } from "@/validation/hours";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
@@ -103,8 +105,6 @@ export default function VolunteerHoursScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user: me } = useAuth();
   const { show } = useSnackbar();
-  const [data, setData] = useState<VolunteerHours | null>(null);
-  const [loading, setLoading] = useState(true);
   const [direction, setDirection] = useState<"add" | "remove">("add");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -112,36 +112,19 @@ export default function VolunteerHoursScreen() {
   const [errors, setErrors] = useState<Partial<Record<FormField, string>>>({});
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(
-    async (showSpinner = true) => {
-      try {
-        if (showSpinner) setLoading(true);
-        const { data: hours } = await api.get<VolunteerHours>(
-          `/users/${id}/hours`,
-        );
-        setData(hours);
-      } catch (error) {
-        Alert.alert("Error", apiErrorMessage(error, "Failed to load hours"));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [id],
-  );
+  const fetchHours = useCallback(async () => {
+    const { data: hours } = await api.get<VolunteerHours>(`/users/${id}/hours`);
+    return hours;
+  }, [id]);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+  const { data, loading, error, refreshing, reload, refresh, retry } =
+    useScreenData(fetchHours);
 
   if (loading || !data) {
     return (
       <View className="flex-1 bg-white">
         <BackBar fallback="/(tabs)/admin" />
-        <View className="flex-1 items-center justify-center">
-          {loading ? <ActivityIndicator color="#15803d" /> : null}
-        </View>
+        {error ? <ErrorState message={error} onRetry={retry} /> : <LoadingState />}
       </View>
     );
   }
@@ -186,7 +169,7 @@ export default function VolunteerHoursScreen() {
       setAmount("");
       setReason("");
       setEventId(null);
-      await load(false);
+      await reload();
       show({ message: `Hours adjusted (${formatSignedHours(value)})` });
     } catch (error) {
       Alert.alert("Couldn't adjust hours", apiErrorMessage(error, "Please try again."));
@@ -206,9 +189,20 @@ export default function VolunteerHoursScreen() {
           contentContainerClassName="gap-8 px-5 pb-10 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refresh}
+              tintColor="#15803d"
+              colors={["#15803d"]}
+            />
+          }
         >
           <View className="gap-1">
-            <Text className="text-3xl font-semibold text-gray-900">
+            <Text
+              accessibilityRole="header"
+              className="text-3xl font-semibold text-gray-900"
+            >
               {data.user.firstName} {data.user.lastName}
             </Text>
             <View className="flex-row items-center gap-2">
@@ -234,7 +228,8 @@ export default function VolunteerHoursScreen() {
             <SectionHeader title="Hours history" />
             <HoursHistoryList
               items={data.items}
-              emptyText="No approved hours yet."
+              emptyTitle="No hours yet"
+              emptyHint="Approved events and adjustments will appear here."
             />
           </View>
 

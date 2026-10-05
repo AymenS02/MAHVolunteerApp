@@ -19,7 +19,7 @@ export default function CreateEventScreen() {
       notifyEventsChanged();
       router.back();
     } catch (error) {
-      Alert.alert("Error", apiErrorMessage(error, "Failed to create event"));
+      Alert.alert("Couldn't create event", apiErrorMessage(error, "Please try again."));
     }
   };
 
@@ -36,7 +36,7 @@ export default function CreateEventScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-3xl font-semibold text-gray-900">New event</Text>
+        <Text accessibilityRole="header" className="text-3xl font-semibold text-gray-900">New event</Text>
         <EventForm submitLabel="Create event" onSubmit={create} />
       </ScrollView>
     </KeyboardAvoidingView>

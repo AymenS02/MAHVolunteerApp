@@ -46,7 +46,7 @@ export default function CompleteProfileScreen() {
         <Text className="text-sm font-semibold text-green-700">
           MAH Volunteer
         </Text>
-        <Text className="mt-3 text-4xl font-semibold text-gray-900">
+        <Text accessibilityRole="header" className="mt-3 text-4xl font-semibold text-gray-900">
           One more step
         </Text>
         <Text className="mt-2 text-base text-gray-500">

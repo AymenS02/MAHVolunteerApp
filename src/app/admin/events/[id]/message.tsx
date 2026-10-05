@@ -93,7 +93,7 @@ export default function MessageVolunteersScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="gap-1">
-          <Text className="text-3xl font-semibold text-gray-900">
+          <Text accessibilityRole="header" className="text-3xl font-semibold text-gray-900">
             Message volunteers
           </Text>
           <Text className="text-sm text-gray-500">
@@ -128,8 +128,8 @@ export default function MessageVolunteersScreen() {
             <Switch
               value={includeWaitlist}
               onValueChange={setIncludeWaitlist}
-              trackColor={{ false: "#969a9e", true: "#15803d" }}
-              ios_backgroundColor="#969a9e"
+              trackColor={{ false: "#6b7280", true: "#15803d" }}
+              ios_backgroundColor="#6b7280"
               thumbColor="#ffffff"
               accessibilityLabel="Include the waitlist"
             />

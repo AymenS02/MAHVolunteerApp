@@ -1,14 +1,15 @@
 import BackBar from "@/components/BackBar";
 import EventForm, { EventFormInitial, EventPayload } from "@/components/EventForm";
+import { ErrorState, LoadingState } from "@/components/ScreenState";
 import api from "@/constants/api";
 import { useSnackbar } from "@/context/SnackbarContext";
+import { useScreenData } from "@/hooks/use-screen-data";
 import { apiErrorMessage } from "@/utils/apiError";
 import { notifyEventsChanged } from "@/utils/eventsChanged";
 import { formatHours } from "@/utils/hours";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -30,17 +31,13 @@ export default function EditEventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { show } = useSnackbar();
-  const [data, setData] = useState<EditData | null>(null);
+  const fetchEvent = useCallback(async () => {
+    const { data: event } = await api.get<EditData>(`/events/${id}/edit`);
+    return event;
+  }, [id]);
 
-  useEffect(() => {
-    api
-      .get<EditData>(`/events/${id}/edit`)
-      .then(({ data: event }) => setData(event))
-      .catch((error) => {
-        Alert.alert("Error", apiErrorMessage(error, "Failed to load event"));
-        router.back();
-      });
-  }, [id, router]);
+  // The form only reads these once, so focus refreshes don't reset typing.
+  const { data, error, retry } = useScreenData(fetchEvent);
 
   const save = async (payload: EventPayload) => {
     try {
@@ -69,9 +66,7 @@ export default function EditEventScreen() {
     return (
       <View className="flex-1 bg-white">
         <BackBar />
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#15803d" />
-        </View>
+        {error ? <ErrorState message={error} onRetry={retry} /> : <LoadingState />}
       </View>
     );
   }
@@ -92,7 +87,7 @@ export default function EditEventScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="gap-1">
-          <Text className="text-3xl font-semibold text-gray-900">
+          <Text accessibilityRole="header" className="text-3xl font-semibold text-gray-900">
             Edit event
           </Text>
           {registered > 0 && (

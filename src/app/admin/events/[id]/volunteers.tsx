@@ -1,8 +1,10 @@
 import BackBar from "@/components/BackBar";
 import PillButton from "@/components/PillButton";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ScreenState";
 import SectionHeader from "@/components/SectionHeader";
 import api from "@/constants/api";
 import { useSnackbar } from "@/context/SnackbarContext";
+import { useScreenData } from "@/hooks/use-screen-data";
 import { EventVolunteer, RemovedVolunteer, WaitlistEntry } from "@/types";
 import { apiErrorMessage } from "@/utils/apiError";
 import { formatDateOfBirth, getAge } from "@/utils/dateOfBirth";
@@ -12,19 +14,28 @@ import { Ionicons } from "@expo/vector-icons";
 import { isAxiosError } from "axios";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Linking,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
 } from "react-native";
 
 type RestoreResult = { overCapacity?: boolean };
+
+type Roster = {
+  // The event was deleted (or never existed).
+  missing: boolean;
+  volunteers: EventVolunteer[];
+  removed: RemovedVolunteer[];
+  waitlist: WaitlistEntry[];
+};
 
 const fullName = (person: { firstName: string; lastName: string }) =>
   `${person.firstName} ${person.lastName}`;
@@ -79,7 +90,8 @@ function VolunteerRow({
             <Pressable
               onPress={() => Linking.openURL(`tel:${volunteer.phone}`)}
               accessibilityRole="link"
-              hitSlop={8}
+              accessibilityLabel={`Call ${name}, ${volunteer.phone}`}
+              hitSlop={12}
             >
               <Text className="text-sm font-medium text-green-700">
                 {volunteer.phone}
@@ -111,7 +123,7 @@ function VolunteerRow({
       {expanded && (
         <View className="mt-3 gap-3 rounded-xl bg-gray-50 px-4 py-3">
           <View className="flex-row gap-4">
-            <Text className="w-24 text-sm text-gray-500">Date of birth</Text>
+            <Text className="min-w-[96px] text-sm text-gray-500">Date of birth</Text>
             <Text className="flex-1 text-sm text-gray-900">
               {volunteer.dateOfBirth
                 ? `${formatDateOfBirth(volunteer.dateOfBirth)} (${age})`
@@ -126,7 +138,8 @@ function VolunteerRow({
               })
             }
             accessibilityRole="link"
-            hitSlop={8}
+            accessibilityLabel={`View hours for ${name}`}
+            hitSlop={12}
             className="flex-row items-center justify-between"
           >
             <Text className="text-sm font-semibold text-green-700">
@@ -177,11 +190,6 @@ export default function EventVolunteersScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { show } = useSnackbar();
-  const [volunteers, setVolunteers] = useState<EventVolunteer[]>([]);
-  const [removed, setRemoved] = useState<RemovedVolunteer[]>([]);
-  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [missing, setMissing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -218,49 +226,41 @@ export default function EventVolunteersScreen() {
     }
   };
 
-  const loadVolunteers = useCallback(
-    async (showSpinner = true) => {
-      try {
-        if (showSpinner) setLoading(true);
-        const [current, gone, queue] = await Promise.all([
-          api.get<EventVolunteer[]>(`/events/${id}/volunteers`),
-          api.get<RemovedVolunteer[]>(`/events/${id}/volunteers/removed`),
-          api.get<WaitlistEntry[]>(`/events/${id}/waitlist`),
-        ]);
-        setVolunteers(current.data);
-        setRemoved(gone.data);
-        setWaitlist(queue.data);
-        setMissing(false);
-      } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
-          setMissing(true);
-        } else {
-          Alert.alert("Error", apiErrorMessage(error, "Failed to load volunteers"));
-        }
-      } finally {
-        setLoading(false);
+  const fetchVolunteers = useCallback(async (): Promise<Roster> => {
+    try {
+      const [current, gone, queue] = await Promise.all([
+        api.get<EventVolunteer[]>(`/events/${id}/volunteers`),
+        api.get<RemovedVolunteer[]>(`/events/${id}/volunteers/removed`),
+        api.get<WaitlistEntry[]>(`/events/${id}/waitlist`),
+      ]);
+      return {
+        missing: false,
+        volunteers: current.data,
+        removed: gone.data,
+        waitlist: queue.data,
+      };
+    } catch (error) {
+      if (isAxiosError(error) && error.response?.status === 404) {
+        return { missing: true, volunteers: [], removed: [], waitlist: [] };
       }
-    },
-    [id],
-  );
+      throw error;
+    }
+  }, [id]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadVolunteers();
-    }, [loadVolunteers]),
-  );
+  const { data, loading, error, refreshing, reload, refresh, retry } =
+    useScreenData(fetchVolunteers);
 
   // Runs a row action with that row's spinner showing.
   const withBusy = async (
     userId: string,
-    fallback: string,
+    failureTitle: string,
     action: () => Promise<void>,
   ) => {
     try {
       setBusyId(userId);
       await action();
     } catch (error) {
-      Alert.alert("Error", apiErrorMessage(error, fallback));
+      Alert.alert(failureTitle, apiErrorMessage(error, "Please try again."));
     } finally {
       setBusyId(null);
     }
@@ -272,15 +272,15 @@ export default function EventVolunteersScreen() {
       : `${name} restored`;
 
   const approve = (volunteer: EventVolunteer) =>
-    withBusy(volunteer.userId, "Failed to approve volunteer", async () => {
+    withBusy(volunteer.userId, "Couldn't approve", async () => {
       await api.patch(`/events/${id}/volunteers/${volunteer.userId}/approve`);
-      await loadVolunteers(false);
+      await reload();
     });
 
   const unapprove = (volunteer: EventVolunteer) =>
-    withBusy(volunteer.userId, "Failed to undo approval", async () => {
+    withBusy(volunteer.userId, "Couldn't undo approval", async () => {
       await api.patch(`/events/${id}/volunteers/${volunteer.userId}/unapprove`);
-      await loadVolunteers(false);
+      await reload();
       show({
         message: `${fullName(volunteer)} unapproved`,
         actionLabel: "Undo",
@@ -288,15 +288,15 @@ export default function EventVolunteersScreen() {
           await api.patch(
             `/events/${id}/volunteers/${volunteer.userId}/approve`,
           );
-          await loadVolunteers(false);
+          await reload();
         },
       });
     });
 
   const remove = (volunteer: EventVolunteer) =>
-    withBusy(volunteer.userId, "Failed to remove volunteer", async () => {
+    withBusy(volunteer.userId, "Couldn't remove volunteer", async () => {
       await api.delete(`/events/${id}/volunteers/${volunteer.userId}`);
-      await loadVolunteers(false);
+      await reload();
       show({
         message: `${fullName(volunteer)} removed`,
         actionLabel: "Undo",
@@ -304,18 +304,18 @@ export default function EventVolunteersScreen() {
           const { data } = await api.post<RestoreResult>(
             `/events/${id}/volunteers/${volunteer.userId}/restore`,
           );
-          await loadVolunteers(false);
+          await reload();
           if (data.overCapacity) return restoredMessage(fullName(volunteer), data);
         },
       });
     });
 
   const restore = (volunteer: RemovedVolunteer) =>
-    withBusy(volunteer.userId, "Failed to restore volunteer", async () => {
+    withBusy(volunteer.userId, "Couldn't restore volunteer", async () => {
       const { data } = await api.post<RestoreResult>(
         `/events/${id}/volunteers/${volunteer.userId}/restore`,
       );
-      await loadVolunteers(false);
+      await reload();
       show({ message: restoredMessage(fullName(volunteer), data) });
     });
 
@@ -340,37 +340,30 @@ export default function EventVolunteersScreen() {
         router.replace("/(tabs)/admin");
       }
     } catch (error) {
-      Alert.alert("Error", apiErrorMessage(error, "Failed to delete event"));
+      Alert.alert("Couldn't delete event", apiErrorMessage(error, "Please try again."));
       setDeleting(false);
     }
   };
 
-  if (missing) {
+  if (loading || !data || data.missing) {
     return (
       <View className="flex-1 bg-white">
         <BackBar fallback="/(tabs)/admin" />
-        <View className="flex-1 items-center justify-center px-8">
-          <Text className="text-base font-semibold text-gray-900">
-            Event not available
-          </Text>
-          <Text className="mt-1 text-center text-sm text-gray-500">
-            This event was deleted. You can restore it from the admin tab.
-          </Text>
-        </View>
+        {data?.missing ? (
+          <EmptyState
+            title="Event not available"
+            hint="This event was deleted. You can restore it from the admin tab."
+          />
+        ) : error ? (
+          <ErrorState message={error} onRetry={retry} />
+        ) : (
+          <LoadingState />
+        )}
       </View>
     );
   }
 
-  if (loading) {
-    return (
-      <View className="flex-1 bg-white">
-        <BackBar fallback="/(tabs)/admin" />
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#15803d" />
-        </View>
-      </View>
-    );
-  }
+  const { volunteers, removed, waitlist } = data;
 
   const pending = volunteers.filter(
     (volunteer) => volunteer.status === "registered",
@@ -388,10 +381,21 @@ export default function EventVolunteersScreen() {
         className="flex-1"
         contentContainerClassName="gap-8 px-5 pb-10 pt-2"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refresh}
+            tintColor="#15803d"
+            colors={["#15803d"]}
+          />
+        }
       >
         <View className="gap-3">
           <View className="gap-1">
-            <Text className="text-3xl font-semibold text-gray-900">
+            <Text
+              accessibilityRole="header"
+              className="text-3xl font-semibold text-gray-900"
+            >
               Volunteers
             </Text>
             {volunteers.length > 0 && (
@@ -433,14 +437,10 @@ export default function EventVolunteersScreen() {
         </View>
 
         {volunteers.length === 0 ? (
-          <View className="items-center px-8 py-16">
-            <Text className="text-base font-semibold text-gray-900">
-              No volunteers yet
-            </Text>
-            <Text className="mt-1 text-center text-sm text-gray-500">
-              People who register for this event will show up here.
-            </Text>
-          </View>
+          <EmptyState
+            title="No volunteers yet"
+            hint="People who register for this event will show up here."
+          />
         ) : (
           <>
             {pending.length > 0 && (
@@ -501,7 +501,7 @@ export default function EventVolunteersScreen() {
                     key={entry.userId}
                     className="flex-row items-center gap-3 border-b border-gray-100 py-4"
                   >
-                    <Text className="w-8 text-base font-semibold text-gray-500">
+                    <Text className="min-w-[32px] text-base font-semibold text-gray-500">
                       #{entry.position}
                     </Text>
                     <View className="flex-1">
@@ -559,7 +559,7 @@ export default function EventVolunteersScreen() {
             className={`items-center py-3 ${canDelete ? "" : "opacity-40"}`}
           >
             {deleting ? (
-              <ActivityIndicator color="#dc2626" />
+              <ActivityIndicator color="#dc2626" accessibilityLabel="Deleting event" />
             ) : (
               <Text className="text-sm font-medium text-red-600">
                 Delete event

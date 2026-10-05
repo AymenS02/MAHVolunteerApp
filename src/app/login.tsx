@@ -39,7 +39,7 @@ export default function LoginScreen() {
       router.replace(homeHref(signedIn));
     } catch (error: any) {
       Alert.alert(
-        "Login failed",
+        "Couldn't log in",
         error.response?.data?.message || "Please try again.",
       );
     } finally {
@@ -61,7 +61,7 @@ export default function LoginScreen() {
           <Text className="text-sm font-semibold text-green-700">
             MAH Volunteer
           </Text>
-          <Text className="mt-3 text-4xl font-semibold text-gray-900">
+          <Text accessibilityRole="header" className="mt-3 text-4xl font-semibold text-gray-900">
             Welcome back
           </Text>
           <Text className="mt-2 text-base text-gray-500">
@@ -81,8 +81,9 @@ export default function LoginScreen() {
                 keyboardType="email-address"
                 returnKeyType="next"
                 onSubmitEditing={() => passwordRef.current?.focus()}
+                accessibilityLabel="Email"
                 placeholder="you@example.com"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor="#6b7280"
                 className="rounded-xl bg-gray-50 px-4 py-3.5 text-base text-gray-900"
               />
             </View>
@@ -103,8 +104,9 @@ export default function LoginScreen() {
                   textContentType="password"
                   returnKeyType="go"
                   onSubmitEditing={handleLogin}
+                  accessibilityLabel="Password"
                   placeholder="Your password"
-                  placeholderTextColor="#9ca3af"
+                  placeholderTextColor="#6b7280"
                   className="rounded-xl bg-gray-50 px-4 py-3.5 pr-12 text-base text-gray-900"
                 />
                 <Pressable
@@ -113,7 +115,7 @@ export default function LoginScreen() {
                   accessibilityLabel={
                     showPassword ? "Hide password" : "Show password"
                   }
-                  hitSlop={8}
+                  hitSlop={12}
                   className="absolute right-4"
                 >
                   <Ionicons
@@ -131,7 +133,10 @@ export default function LoginScreen() {
           </View>
 
           <Link href="/register" asChild>
-            <Pressable className="mt-6 py-2" accessibilityRole="link">
+            <Pressable
+              className="mt-6 min-h-[44px] justify-center py-2"
+              accessibilityRole="link"
+            >
               <Text className="text-center text-gray-500">
                 New here?
                 <Text className="font-semibold text-green-700">

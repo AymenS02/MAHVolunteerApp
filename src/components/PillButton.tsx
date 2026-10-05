@@ -27,7 +27,7 @@ export default function PillButton({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityState={{ disabled: disabled || loading, busy: loading }}
-      className={`min-h-[40px] min-w-[96px] items-center justify-center rounded-full px-4 ${
+      className={`min-h-[44px] min-w-[96px] items-center justify-center rounded-full px-4 ${
         primary
           ? "bg-green-700 active:bg-green-800"
           : "border border-gray-300 bg-white active:bg-gray-50"

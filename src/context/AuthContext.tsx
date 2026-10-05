@@ -208,7 +208,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   if (restoring) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator color="#15803d" />
+        <ActivityIndicator color="#15803d" accessibilityLabel="Loading" />
         <Text className="mt-3 text-gray-500">Loading...</Text>
       </View>
     );

@@ -30,6 +30,37 @@ function Spots({ label, left }: { label: string; left: number }) {
   );
 }
 
+const spotsText = (label: string, left: number) =>
+  left === 0 ? `${label} full` : `${left} ${label.toLowerCase()} ${left === 1 ? "spot" : "spots"} left`;
+
+// One sentence for screen readers instead of a jumble of separate texts.
+const describe = (event: Event) => {
+  const status = event.myWaitlistPosition
+    ? `Waitlisted, number ${event.myWaitlistPosition}`
+    : event.myStatus === "approved"
+      ? "Approved"
+      : event.myStatus === "registered"
+        ? "Registered"
+        : null;
+
+  return [
+    event.name,
+    formatDate(event.date),
+    event.location,
+    `${event.hours} ${event.hours === 1 ? "hour" : "hours"}`,
+    event.brothersMax > 0
+      ? spotsText("Brothers", spotsLeft(event.brothersMax, event.brothersRegistered))
+      : null,
+    event.sistersMax > 0
+      ? spotsText("Sisters", spotsLeft(event.sistersMax, event.sistersRegistered))
+      : null,
+    status,
+    event.myStatus && event.previousDate ? "Date changed" : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+};
+
 export default function EventCard({ event, onPress }: Props) {
   const approved = event.myStatus === "approved";
 
@@ -37,6 +68,8 @@ export default function EventCard({ event, onPress }: Props) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
+      accessibilityLabel={describe(event)}
+      accessibilityHint="Opens the event"
       className="rounded-2xl bg-gray-50 p-5 active:bg-gray-100"
     >
       <View className="flex-row items-start justify-between gap-3">

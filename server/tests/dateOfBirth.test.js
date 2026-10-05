@@ -138,7 +138,8 @@ describe("validation", () => {
     ["impossible date", "2010-02-30", "Enter a real date of birth"],
     ["future date", isoYearsAgo(-1), "Date of birth must be in the past"],
     ["today", isoYearsAgo(0), "Date of birth must be in the past"],
-    ["one day short of 12", isoYearsAgo(12, 1), "You must be at least 12 years old"],
+    ["one day short of 13", isoYearsAgo(13, 1), "You must be at least 13 years old"],
+    ["12 years old", isoYearsAgo(12), "You must be at least 13 years old"],
     ["100 or older", isoYearsAgo(100), "Enter a valid date of birth"],
   ];
 
@@ -150,8 +151,8 @@ describe("validation", () => {
     });
   });
 
-  test("accepts exactly 12 today and 99, stored at UTC midnight", async () => {
-    for (const [n, day] of [[1, isoYearsAgo(12)], [2, isoYearsAgo(100, 1)]]) {
+  test("accepts exactly 13 today and 99, stored at UTC midnight", async () => {
+    for (const [n, day] of [[1, isoYearsAgo(13)], [2, isoYearsAgo(100, 1)]]) {
       const res = await register(day, `ok-${n}`);
       assert.equal(res.status, 201, JSON.stringify(res.body));
       assert.equal(res.body.user.dateOfBirth, midnightUtc(day));

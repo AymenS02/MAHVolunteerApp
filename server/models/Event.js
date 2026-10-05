@@ -83,6 +83,12 @@ const eventSchema = new mongoose.Schema(
     // Soft delete: null while the event is live.
     deletedAt: { type: Date, default: null, index: true },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    // When set, only these accounts (and admins) can see or join the event.
+    // Used for the App Review sample events; real events leave it unset.
+    visibleTo: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      default: undefined,
+    },
     // Set when an admin moves the event. People registered before the
     // change may cancel even inside the 10-hour lock.
     previousDate: { type: Date },

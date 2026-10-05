@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "MAHVolunteerApp",
+    "name": "MAH Volunteer",
     "slug": "MAHVolunteerApp",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,9 +8,15 @@
     "scheme": "mahvolunteerapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "org.mahcanada.volunteer",
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "package": "org.mahcanada.volunteer",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

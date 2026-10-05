@@ -2,7 +2,7 @@
 // so always read them back with UTC parts, or a phone west of UTC would show
 // the day before.
 
-export const MIN_AGE = 12;
+export const MIN_AGE = 13;
 export const MAX_AGE = 100;
 
 // "YYYY-MM-DD" from the day the user picked, using local parts.

@@ -121,3 +121,15 @@ export const promoteFromWaitlist = async (eventId) => {
     }
   }
 };
+
+// Query part: events this user may see. Events with `visibleTo` are hidden
+// from everyone not listed; admins see everything.
+export const visibleToUser = (user) =>
+  user.role === "admin"
+    ? {}
+    : { $or: [{ visibleTo: { $exists: false } }, { visibleTo: user._id }] };
+
+export const canSee = (event, user) =>
+  user.role === "admin" ||
+  !event.visibleTo ||
+  event.visibleTo.some((id) => id.equals(user._id));

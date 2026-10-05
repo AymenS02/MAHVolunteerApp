@@ -224,3 +224,18 @@ describe("startup", () => {
     assert.match(stderr, /JWT_SECRET is not set/);
   });
 });
+
+describe("public pages", () => {
+  test("/privacy and /support are served as HTML; other files aren't exposed", async () => {
+    for (const page of ["/privacy", "/support"]) {
+      const res = await fetch(`${api.base}${page}`);
+      assert.equal(res.status, 200, page);
+      assert.match(res.headers.get("content-type"), /text\/html/);
+    }
+    const policy = await (await fetch(`${api.base}/privacy`)).text();
+    assert.match(policy, /at least 13 years old/);
+
+    const missing = await fetch(`${api.base}/server.js`);
+    assert.equal(missing.status, 404);
+  });
+});

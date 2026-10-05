@@ -1,9 +1,12 @@
 import axios, { isAxiosError } from "axios";
 import * as SecureStore from "expo-secure-store";
 
+// Set per build in eas.json (production: https://api.mahcanada.com/api) or
+// in .env for development. Without it, development falls back to the local
+// server and release builds to production.
 const API_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? "http://192.168.2.56:5000/api";
-console.log("API URL:", API_URL);
+  process.env.EXPO_PUBLIC_API_URL ??
+  (__DEV__ ? "http://192.168.2.56:5000/api" : "https://api.mahcanada.com/api");
 
 const api = axios.create({
   baseURL: API_URL,

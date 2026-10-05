@@ -1,4 +1,6 @@
 import Event from "../models/Event.js";
+import HourAdjustment from "../models/HourAdjustment.js";
+import NotificationLog from "../models/NotificationLog.js";
 import PushToken from "../models/PushToken.js";
 import User from "../models/User.js";
 import { isPushToken } from "../services/push.js";
@@ -158,7 +160,11 @@ export const deleteMyAccount = async (req, res) => {
       },
     );
 
+    // Everything else about this person, as the privacy policy promises:
+    // devices, hours adjustments (with their reasons) and notification records.
     await PushToken.deleteMany({ user: req.user._id });
+    await HourAdjustment.deleteMany({ user: req.user._id });
+    await NotificationLog.deleteMany({ user: req.user._id });
     await User.findByIdAndDelete(req.user._id);
 
     for (const event of heldSpots) {

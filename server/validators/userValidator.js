@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const MIN_AGE = 12;
+// 13+: collecting data from under-13s brings in COPPA-style consent rules.
+export const MIN_AGE = 13;
 export const MAX_AGE = 100;
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;

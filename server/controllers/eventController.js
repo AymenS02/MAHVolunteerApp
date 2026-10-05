@@ -12,6 +12,8 @@ import {
   promoteFromWaitlist,
   rosterOpenFilter,
   somebodyWaitingExpr,
+  visibleToUser,
+  canSee,
   waitingFor,
 } from "../services/roster.js";
 import {
@@ -111,7 +113,10 @@ export const listEvents = async (req, res) => {
     const format = (event) => formatEventForUser(event, userId, req.user.gender);
 
     if (req.query.when === undefined) {
-      const events = await Event.find({ deletedAt: null }).sort({ date: 1 });
+      const events = await Event.find({
+        deletedAt: null,
+        ...visibleToUser(req.user),
+      }).sort({ date: 1 });
       return res.json(events.map(format));
     }
 
@@ -126,6 +131,7 @@ export const listEvents = async (req, res) => {
     const base = {
       deletedAt: null,
       date: upcoming ? { $gt: now } : { $lte: now },
+      ...visibleToUser(req.user),
     };
 
     let after = {};
@@ -164,7 +170,11 @@ export const listEvents = async (req, res) => {
 
 export const getEvent = async (req, res) => {
   try {
-    const event = await Event.findOne({ _id: req.params.id, deletedAt: null });
+    const event = await Event.findOne({
+      _id: req.params.id,
+      deletedAt: null,
+      ...visibleToUser(req.user),
+    });
 
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
@@ -423,7 +433,7 @@ const canTakeSpot = (gender) => ({
 const registerFailure = async (eventId, user) => {
   const event = await Event.findById(eventId);
 
-  if (!event) {
+  if (!event || !canSee(event, user)) {
     return { status: 404, message: "Event not found" };
   }
 
@@ -474,6 +484,7 @@ export const registerForEvent = async (req, res) => {
         "volunteers.user": { $ne: userId },
         "waitlist.user": { $ne: userId },
         ...canTakeSpot(userGender),
+        ...visibleToUser(req.user),
       },
       {
         $push: {
@@ -1139,6 +1150,7 @@ export const undoCancelRegistration = async (req, res) => {
         "volunteers.user": { $ne: userId },
         "waitlist.user": { $ne: userId },
         ...canTakeSpot(userGender),
+        ...visibleToUser(req.user),
       },
       {
         $push: {
@@ -1186,7 +1198,9 @@ export const undoCancelRegistration = async (req, res) => {
 const waitlistFailure = async (eventId, user) => {
   const event = await Event.findById(eventId);
 
-  if (!event) return { status: 404, message: "Event not found" };
+  if (!event || !canSee(event, user)) {
+    return { status: 404, message: "Event not found" };
+  }
   if (event.deletedAt) return { status: 410, message: EVENT_DELETED };
   if (new Date() >= event.date) {
     return { status: 400, message: "Event has already started" };
@@ -1219,6 +1233,7 @@ export const joinWaitlist = async (req, res) => {
         "volunteers.user": { $ne: userId },
         "waitlist.user": { $ne: userId },
         [maxField(gender)]: { $gt: 0 },
+        ...visibleToUser(req.user),
         $expr: { $or: [isFullExpr(gender), somebodyWaitingExpr(gender)] },
       },
       {

@@ -1,10 +1,14 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createAuthLimiters } from "./middleware/rateLimit.js";
 import authRoutes from "./routes/authRoutes.js";
 import eventRoutes from "./routes/eventRoutes.js";
 import { createUserRoutes } from "./routes/userRoutes.js";
+
+const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
 
 const parseList = (value) =>
   (value ?? "")
@@ -48,6 +52,9 @@ export const createApp = ({
   app.use("/api/users", createUserRoutes({ passwordLimiter }));
   app.use("/api/auth", authRoutes);
   app.use("/api/events", eventRoutes);
+
+  // Public pages the App Store listing links to: /privacy and /support.
+  app.use(express.static(PUBLIC_DIR, { extensions: ["html"], index: false }));
 
   // JSON instead of Express's HTML pages, which include stack traces in dev.
   app.use((req, res) => {

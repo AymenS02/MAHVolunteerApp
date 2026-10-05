@@ -11,6 +11,7 @@ export type User = {
   role: Role;
   volunteerHours: number;
   highschoolStudent: boolean;
+  notificationsEnabled?: boolean;
   // "YYYY-MM-DD" at UTC midnight as ISO. Missing on accounts created before
   // it was collected; those users are sent to /complete-profile.
   dateOfBirth?: string | null;
@@ -41,6 +42,15 @@ export type Event = {
   myCancelLockWaived?: boolean;
   // Your own counted hours once approved; null otherwise.
   myHours?: number | null;
+  // Waitlist counts per group; who is waiting is never shared.
+  brothersWaitlisted?: number;
+  sistersWaitlisted?: number;
+  // Your place in your group's queue, or null if you're not waiting.
+  myWaitlistPosition?: number | null;
+  // Set when your registration came from the waitlist.
+  myPromotedAt?: string | null;
+  // False within 10 hours of the event: no sign-ups or waitlist.
+  signupsOpen?: boolean;
 };
 
 export type EventPage = {
@@ -109,6 +119,28 @@ export type VolunteerHours = HoursHistory & {
     dateOfBirth: string | null;
   };
   audit: AdjustmentAudit[];
+};
+
+// Admin view of an event's waitlist, in queue order per group.
+export type WaitlistEntry = {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  gender: Gender;
+  position: number;
+  joinedAt: string;
+  dateOfBirth: string | null;
+};
+
+// A message admins sent to an event's volunteers. Admins also get who sent
+// it and how many people it went to.
+export type EventMessage = {
+  id: string;
+  body: string;
+  createdAt: string;
+  sentBy?: string;
+  recipientCount?: number;
+  includeWaitlist?: boolean;
 };
 
 export type RemovedVolunteer = {

@@ -65,6 +65,13 @@ export default function EventCard({ event, onPress }: Props) {
 
       <View className="mt-2 flex-row flex-wrap items-center gap-2">
         <Text className="text-sm text-gray-600">{formatDate(event.date)}</Text>
+        {event.myWaitlistPosition ? (
+          <View className="rounded-full border border-gray-300 px-2 py-0.5">
+            <Text className="text-xs font-semibold text-gray-900">
+              Waitlisted #{event.myWaitlistPosition}
+            </Text>
+          </View>
+        ) : null}
         {event.myStatus && event.previousDate ? (
           <View className="rounded-full border border-gray-300 px-2 py-0.5">
             <Text className="text-xs font-semibold text-gray-900">

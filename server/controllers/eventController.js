@@ -1,5 +1,25 @@
 import Event from "../models/Event.js";
 import User from "../models/User.js";
+import {
+  clearClosedWaitlist,
+  countGender,
+  hasSpotExpr,
+  isFullExpr,
+  isRosterOpen,
+  LOCK_MS,
+  maxField,
+  nobodyWaitingExpr,
+  promoteFromWaitlist,
+  rosterOpenFilter,
+  somebodyWaitingExpr,
+  waitingFor,
+} from "../services/roster.js";
+import {
+  notifyApproved,
+  queueEventChanged,
+  queueEventDeleted,
+  queueEventRestored,
+} from "../services/notifications.js";
 import { inTransaction } from "../utils/transaction.js";
 import { eventPageSchema } from "../validators/eventValidator.js";
 import { ageOn, startOfTodayUtc } from "../validators/userValidator.js";
@@ -7,12 +27,7 @@ import { ageOn, startOfTodayUtc } from "../validators/userValidator.js";
 const EVENT_DELETED = "This event was deleted";
 const NOT_STARTED = "Hours can only be approved once the event has started";
 
-const CANCEL_LOCK_MS = 10 * 60 * 60 * 1000;
-
-const maxField = (gender) => (gender === "brother" ? "brothersMax" : "sistersMax");
-
-const countGender = (event, gender) =>
-  event.volunteers.filter((v) => v.gender === gender).length;
+const SIGNUPS_CLOSED = "Sign-ups closed 10 hours before the event";
 
 // Built field by field so volunteer data, admin fields and anything added to
 // the model later never reach non-admin clients by accident.
@@ -24,6 +39,8 @@ const registeredBeforeDateChange = (event, entry) =>
 
 const formatEventForUser = (event, userId, userGender) => {
   const myEntry = event.volunteers.find((v) => v.user.toString() === userId);
+  const myQueue = waitingFor(event, userGender);
+  const myPlace = myQueue.findIndex((w) => w.user.toString() === userId);
 
   const response = {
     _id: event._id,
@@ -48,6 +65,13 @@ const formatEventForUser = (event, userId, userGender) => {
       myEntry?.status === "approved"
         ? (myEntry.hoursAwarded ?? event.hours)
         : null,
+    // Counts only: who is waiting is never shared.
+    brothersWaitlisted: waitingFor(event, "brother").length,
+    sistersWaitlisted: waitingFor(event, "sister").length,
+    myWaitlistPosition: myPlace === -1 ? null : myPlace + 1,
+    myPromotedAt: myEntry?.promotedAt ?? null,
+    // False within 10 hours of the event: no sign-ups, waitlist or promotions.
+    signupsOpen: isRosterOpen(event),
   };
 
   // Registered volunteers see only their own group's contact.
@@ -190,6 +214,8 @@ export const getEventForEdit = async (req, res) => {
       sistersRegistered: countGender(event, "sister"),
       approvedCount: event.volunteers.filter((v) => v.status === "approved")
         .length,
+      brothersWaitlisted: waitingFor(event, "brother").length,
+      sistersWaitlisted: waitingFor(event, "sister").length,
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -317,6 +343,30 @@ export const updateEvent = async (req, res) => {
       }
 
       const warnings = [];
+
+      // Within 10 hours the roster is frozen and the waitlist is cleared.
+      const waiting = (gender) => waitingFor(event, gender).length;
+      if (!isRosterOpen(updated) && waiting("brother") + waiting("sister") > 0) {
+        await Event.updateOne({ _id: id }, { $set: { waitlist: [] } }, { session });
+        warnings.push(
+          "The event is now within 10 hours, so sign-ups are closed and the waitlist was cleared.",
+        );
+      } else {
+        // A group that's no longer needed has nothing to wait for.
+        for (const gender of ["brother", "sister"]) {
+          if (input[maxField(gender)] === 0 && waiting(gender) > 0) {
+            await Event.updateOne(
+              { _id: id },
+              { $pull: { waitlist: { gender } } },
+              { session },
+            );
+            warnings.push(
+              `${waiting(gender)} ${gender}${waiting(gender) === 1 ? " was" : "s were"} on the waitlist and ${waiting(gender) === 1 ? "was" : "were"} removed from it.`,
+            );
+          }
+        }
+      }
+
       for (const gender of ["brother", "sister"]) {
         const registered = countGender(updated, gender);
         const max = updated[maxField(gender)];
@@ -329,6 +379,7 @@ export const updateEvent = async (req, res) => {
 
       return {
         status: 200,
+        before: { date: event.date, location: event.location, hours: event.hours },
         body: {
           event: formatEventForUser(updated, req.user._id.toString(), req.user.gender),
           warnings,
@@ -337,6 +388,23 @@ export const updateEvent = async (req, res) => {
       };
     });
 
+    if (result.status === 200) {
+      // More spots (or a later date) can let people in from the waitlist.
+      await promoteFromWaitlist(id);
+
+      // Volunteers hear about date/location/hours changes after a short
+      // delay, merged with any follow-up edits.
+      const { before } = result;
+      const event = req.body;
+      if (
+        Math.abs(before.date.getTime() - event.date.getTime()) >= 60 * 1000 ||
+        before.location !== event.location ||
+        before.hours !== event.hours
+      ) {
+        await queueEventChanged(id, before);
+      }
+    }
+
     return res.status(result.status).json(result.body);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -344,21 +412,11 @@ export const updateEvent = async (req, res) => {
 };
 
 // Matches only while the event still has a free spot for this gender.
-const hasSpotFor = (gender) => ({
-  $expr: {
-    $lt: [
-      {
-        $size: {
-          $filter: {
-            input: "$volunteers",
-            as: "v",
-            cond: { $eq: ["$$v.gender", gender] },
-          },
-        },
-      },
-      `$${maxField(gender)}`,
-    ],
-  },
+// Matches only while the roster is open, the group has room and nobody in
+// the group is waiting (so registering can't jump the waitlist).
+const canTakeSpot = (gender) => ({
+  ...rosterOpenFilter(),
+  $expr: { $and: [hasSpotExpr(gender), nobodyWaitingExpr(gender)] },
 });
 
 // Explains why the atomic register update matched nothing.
@@ -377,12 +435,28 @@ const registerFailure = async (eventId, user) => {
     return { status: 400, message: "Event has already started" };
   }
 
+  if (!isRosterOpen(event)) {
+    return { status: 400, message: SIGNUPS_CLOSED };
+  }
+
   if (event.volunteers.some((v) => v.user.equals(user._id))) {
     return { status: 400, message: "You are already registered" };
   }
 
+  if (event.waitlist.some((w) => w.user.equals(user._id))) {
+    return { status: 400, message: "You're on the waitlist for this event" };
+  }
+
   if (event[maxField(user.gender)] === 0) {
     return { status: 400, message: `This event does not need ${user.gender}s` };
+  }
+
+  if (waitingFor(event, user.gender).length > 0) {
+    return {
+      status: 409,
+      message: `There's a waitlist for ${user.gender}s. Join it to get the next spot.`,
+      waitlist: true,
+    };
   }
 
   return { status: 400, message: `No spots left for ${user.gender}s` };
@@ -397,9 +471,9 @@ export const registerForEvent = async (req, res) => {
       {
         _id: req.params.id,
         deletedAt: null,
-        date: { $gt: new Date() },
         "volunteers.user": { $ne: userId },
-        ...hasSpotFor(userGender),
+        "waitlist.user": { $ne: userId },
+        ...canTakeSpot(userGender),
       },
       {
         $push: {
@@ -435,16 +509,18 @@ export const cancelRegistration = async (req, res) => {
       {
         _id: req.params.id,
         deletedAt: null,
-        date: { $gt: new Date(Date.now() + CANCEL_LOCK_MS) },
+        date: { $gt: new Date(Date.now() + LOCK_MS) },
         volunteers: { $elemMatch: { user: userId, status: "registered" } },
       },
       { $pull: { volunteers: { user: userId, status: "registered" } } },
-      { returnDocument: "after" },
     );
 
     if (event) {
+      // The freed spot goes to the next person waiting in that group.
+      await promoteFromWaitlist(req.params.id);
+      const fresh = await Event.findById(req.params.id);
       return res.json(
-        formatEventForUser(event, userId.toString(), req.user.gender),
+        formatEventForUser(fresh, userId.toString(), req.user.gender),
       );
     }
 
@@ -556,16 +632,29 @@ export const getVolunteersCsv = async (req, res) => {
     const event = await Event.findOne({
       _id: req.params.id,
       deletedAt: null,
-    }).populate({
-      path: "volunteers.user",
-      select: "firstName lastName +dateOfBirth",
-    });
+    }).populate([
+      { path: "volunteers.user", select: "firstName lastName +dateOfBirth" },
+      { path: "waitlist.user", select: "firstName lastName +dateOfBirth" },
+    ]);
 
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
     }
 
     const today = startOfTodayUtc();
+    const under18 = (dob) =>
+      dob ? (ageOn(dob, today) < 18 ? "Yes" : "No") : "Unknown";
+    const waitlistRows = ["brother", "sister"].flatMap((gender) =>
+      waitingFor(event, gender)
+        .filter((entry) => entry.user)
+        .map((entry, index) => [
+          entry.user.firstName,
+          entry.user.lastName,
+          gender === "brother" ? "Brother" : "Sister",
+          `Waitlisted #${index + 1}`,
+          under18(entry.user.dateOfBirth),
+        ]),
+    );
     const rows = event.volunteers
       .filter((volunteer) => volunteer.user)
       .map((volunteer) => {
@@ -575,7 +664,7 @@ export const getVolunteersCsv = async (req, res) => {
           volunteer.user.lastName,
           volunteer.gender === "brother" ? "Brother" : "Sister",
           volunteer.status === "approved" ? "Approved" : "Registered",
-          dob ? (ageOn(dob, today) < 18 ? "Yes" : "No") : "Unknown",
+          under18(dob),
         ];
       })
       .sort((a, b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]));
@@ -583,13 +672,14 @@ export const getVolunteersCsv = async (req, res) => {
     const lines = [
       ["First name", "Last name", "Group", "Status", "Under 18"],
       ...rows,
+      ...waitlistRows,
     ].map((row) => row.map(csvCell).join(","));
 
     const day = event.date.toISOString().slice(0, 10);
     res.attachment(`${fileSlug(event.name)}-${day}-volunteers.csv`);
     res.type("text/csv; charset=utf-8");
     // The byte-order mark makes Excel read accented names correctly.
-    return res.send(`﻿${lines.join("\r\n")}\r\n`);
+    return res.send(`\uFEFF${lines.join("\r\n")}\r\n`);
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -662,6 +752,11 @@ export const approveVolunteer = async (req, res) => {
 
       return { status: 200, body: { message: "Volunteer approved", changed: true } };
     });
+
+    if (result.body.changed) {
+      const event = await Event.findById(id).select("name hours");
+      notifyApproved(userId, event, event.hours);
+    }
 
     return res.status(result.status).json(result.body);
   } catch (error) {
@@ -839,6 +934,10 @@ export const removeVolunteer = async (req, res) => {
       return { status: 200, body: { message: "Volunteer removed", changed: true } };
     });
 
+    if (result.body.changed) {
+      await promoteFromWaitlist(id);
+    }
+
     return res.status(result.status).json(result.body);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -892,7 +991,10 @@ export const restoreVolunteer = async (req, res) => {
           "volunteers.user": { $ne: userId },
         },
         {
-          $pull: { removedVolunteers: { user: userId } },
+          $pull: {
+            removedVolunteers: { user: userId },
+            waitlist: { user: userId },
+          },
           $push: {
             volunteers: {
               user: userId,
@@ -963,16 +1065,19 @@ export const getDeletedEvents = async (req, res) => {
 // touch anyone's volunteerHours.
 export const deleteEvent = async (req, res) => {
   try {
+    const deletedAt = new Date();
     const event = await Event.findOneAndUpdate(
       {
         _id: req.params.id,
         deletedAt: null,
         "volunteers.status": { $ne: "approved" },
       },
-      { $set: { deletedAt: new Date(), deletedBy: req.user._id } },
+      { $set: { deletedAt, deletedBy: req.user._id } },
     );
 
     if (event) {
+      // Sent after the Undo window, and only if it's still deleted then.
+      await queueEventDeleted(event._id, deletedAt);
       return res.json({ message: "Event deleted", changed: true });
     }
 
@@ -1002,6 +1107,9 @@ export const restoreEvent = async (req, res) => {
     );
 
     if (event) {
+      await promoteFromWaitlist(req.params.id);
+      // "Back on" goes only to people who were told it was cancelled.
+      await queueEventRestored(event._id, event.deletedAt);
       return res.json({ message: "Event restored", changed: true });
     }
 
@@ -1028,9 +1136,9 @@ export const undoCancelRegistration = async (req, res) => {
       {
         _id: req.params.id,
         deletedAt: null,
-        date: { $gt: new Date() },
         "volunteers.user": { $ne: userId },
-        ...hasSpotFor(userGender),
+        "waitlist.user": { $ne: userId },
+        ...canTakeSpot(userGender),
       },
       {
         $push: {
@@ -1062,13 +1170,137 @@ export const undoCancelRegistration = async (req, res) => {
 
     const failure = await registerFailure(req.params.id, req.user);
 
-    if (failure.message.startsWith("No spots left")) {
+    if (failure.message.startsWith("No spots left") || failure.waitlist) {
       return res.status(409).json({
         message: "Someone took your spot, so your registration couldn't be restored",
       });
     }
 
     return res.status(failure.status).json({ message: failure.message });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Explains why joining the waitlist matched nothing.
+const waitlistFailure = async (eventId, user) => {
+  const event = await Event.findById(eventId);
+
+  if (!event) return { status: 404, message: "Event not found" };
+  if (event.deletedAt) return { status: 410, message: EVENT_DELETED };
+  if (new Date() >= event.date) {
+    return { status: 400, message: "Event has already started" };
+  }
+  if (!isRosterOpen(event)) return { status: 400, message: SIGNUPS_CLOSED };
+  if (event.volunteers.some((v) => v.user.equals(user._id))) {
+    return { status: 400, message: "You are already registered" };
+  }
+  if (event.waitlist.some((w) => w.user.equals(user._id))) {
+    return { status: 400, message: "You're already on the waitlist" };
+  }
+  if (event[maxField(user.gender)] === 0) {
+    return { status: 400, message: `This event does not need ${user.gender}s` };
+  }
+  return { status: 409, message: "A spot is open, so you can register instead" };
+};
+
+// Join the end of your group's queue. Only possible while the roster is
+// open and your group is full or already has people waiting.
+export const joinWaitlist = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const gender = req.user.gender;
+
+    const joined = await Event.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        deletedAt: null,
+        ...rosterOpenFilter(),
+        "volunteers.user": { $ne: userId },
+        "waitlist.user": { $ne: userId },
+        [maxField(gender)]: { $gt: 0 },
+        $expr: { $or: [isFullExpr(gender), somebodyWaitingExpr(gender)] },
+      },
+      {
+        $push: { waitlist: { user: userId, gender, joinedAt: new Date() } },
+        // Joining replaces any earlier removal by an admin.
+        $pull: { removedVolunteers: { user: userId } },
+      },
+    );
+
+    if (!joined) {
+      const failure = await waitlistFailure(req.params.id, req.user);
+      return res.status(failure.status).json({ message: failure.message });
+    }
+
+    // If a spot is somehow free, the queue moves now (possibly to you).
+    await promoteFromWaitlist(req.params.id);
+    const fresh = await Event.findById(req.params.id);
+    return res.json(formatEventForUser(fresh, userId.toString(), gender));
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+export const leaveWaitlist = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    await Event.updateOne(
+      { _id: req.params.id, "waitlist.user": userId },
+      { $pull: { waitlist: { user: userId } } },
+    );
+
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    if (event.deletedAt) {
+      return res.status(410).json({ message: EVENT_DELETED });
+    }
+
+    return res.json(formatEventForUser(event, userId.toString(), req.user.gender));
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Admin: the open waitlist in queue order, per group.
+export const getWaitlist = async (req, res) => {
+  try {
+    const event = await Event.findOne({
+      _id: req.params.id,
+      deletedAt: null,
+    }).populate({
+      path: "waitlist.user",
+      select: "firstName lastName +dateOfBirth",
+    });
+
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    if (!isRosterOpen(event)) {
+      await clearClosedWaitlist(event._id);
+    }
+
+    return res.json(
+      ["brother", "sister"].flatMap((gender) =>
+        waitingFor(event, gender)
+          .filter((entry) => entry.user)
+          .map((entry, index) => ({
+            userId: entry.user._id,
+            firstName: entry.user.firstName,
+            lastName: entry.user.lastName,
+            gender,
+            position: index + 1,
+            joinedAt: entry.joinedAt,
+            dateOfBirth: entry.user.dateOfBirth ?? null,
+          })),
+      ),
+    );
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }

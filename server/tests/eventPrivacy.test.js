@@ -22,6 +22,11 @@ const ALLOWED_FIELDS = new Set([
   "dateChangedAt",
   "myCancelLockWaived",
   "myHours",
+  "brothersWaitlisted",
+  "sistersWaitlisted",
+  "myWaitlistPosition",
+  "myPromotedAt",
+  "signupsOpen",
 ]);
 
 const assertSafeEvent = (event, label) => {

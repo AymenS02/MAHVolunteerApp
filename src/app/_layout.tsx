@@ -1,5 +1,6 @@
 import { AuthProvider, needsProfile, useAuth } from "@/context/AuthContext";
 import { SnackbarProvider, useSnackbar } from "@/context/SnackbarContext";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
 import "../../global.css";
@@ -14,6 +15,7 @@ function AppNavigator() {
   }, [user, hide]);
 
   const profileMissing = needsProfile(user);
+  usePushNotifications(user, !profileMissing);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

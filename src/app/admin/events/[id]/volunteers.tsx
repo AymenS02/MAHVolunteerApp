@@ -3,9 +3,10 @@ import PillButton from "@/components/PillButton";
 import SectionHeader from "@/components/SectionHeader";
 import api from "@/constants/api";
 import { useSnackbar } from "@/context/SnackbarContext";
-import { EventVolunteer, RemovedVolunteer } from "@/types";
+import { EventVolunteer, RemovedVolunteer, WaitlistEntry } from "@/types";
 import { apiErrorMessage } from "@/utils/apiError";
 import { formatDateOfBirth, getAge } from "@/utils/dateOfBirth";
+import { formatShortDate } from "@/utils/hours";
 import { notifyEventsChanged } from "@/utils/eventsChanged";
 import { Ionicons } from "@expo/vector-icons";
 import { isAxiosError } from "axios";
@@ -178,6 +179,7 @@ export default function EventVolunteersScreen() {
   const { show } = useSnackbar();
   const [volunteers, setVolunteers] = useState<EventVolunteer[]>([]);
   const [removed, setRemoved] = useState<RemovedVolunteer[]>([]);
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -220,12 +222,14 @@ export default function EventVolunteersScreen() {
     async (showSpinner = true) => {
       try {
         if (showSpinner) setLoading(true);
-        const [current, gone] = await Promise.all([
+        const [current, gone, queue] = await Promise.all([
           api.get<EventVolunteer[]>(`/events/${id}/volunteers`),
           api.get<RemovedVolunteer[]>(`/events/${id}/volunteers/removed`),
+          api.get<WaitlistEntry[]>(`/events/${id}/waitlist`),
         ]);
         setVolunteers(current.data);
         setRemoved(gone.data);
+        setWaitlist(queue.data);
         setMissing(false);
       } catch (error) {
         if (isAxiosError(error) && error.response?.status === 404) {
@@ -396,13 +400,23 @@ export default function EventVolunteersScreen() {
               </Text>
             )}
           </View>
-          <View className="flex-row gap-2">
+          <View className="flex-row flex-wrap gap-2">
             <PillButton
               title="Edit event"
               variant="outline"
               onPress={() =>
                 router.push({
                   pathname: "/admin/events/[id]/edit",
+                  params: { id },
+                })
+              }
+            />
+            <PillButton
+              title="Message"
+              variant="outline"
+              onPress={() =>
+                router.push({
+                  pathname: "/admin/events/[id]/message",
                   params: { id },
                 })
               }
@@ -471,6 +485,52 @@ export default function EventVolunteersScreen() {
               </View>
             )}
           </>
+        )}
+
+        {waitlist.length > 0 && (
+          <View>
+            <SectionHeader title="Waitlist" />
+            <Text className="mt-1 text-sm text-gray-500">
+              Promoted automatically, in this order, when a spot opens.
+            </Text>
+            <View className="mt-1">
+              {waitlist.map((entry) => {
+                const age = entry.dateOfBirth ? getAge(entry.dateOfBirth) : null;
+                return (
+                  <View
+                    key={entry.userId}
+                    className="flex-row items-center gap-3 border-b border-gray-100 py-4"
+                  >
+                    <Text className="w-8 text-base font-semibold text-gray-500">
+                      #{entry.position}
+                    </Text>
+                    <View className="flex-1">
+                      <View className="flex-row items-center gap-2">
+                        <Text
+                          numberOfLines={1}
+                          className="shrink text-base font-semibold text-gray-900"
+                        >
+                          {fullName(entry)}
+                        </Text>
+                        {age !== null && age < 18 && (
+                          <View className="rounded-full bg-gray-900 px-2 py-0.5">
+                            <Text className="text-xs font-semibold text-white">
+                              Under 18
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text className="mt-0.5 text-sm text-gray-500">
+                        {entry.gender === "brother" ? "Brother" : "Sister"} ·{" "}
+                        {age !== null ? age : "Age not set"} · joined{" "}
+                        {formatShortDate(entry.joinedAt)}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
         )}
 
         {removed.length > 0 && (

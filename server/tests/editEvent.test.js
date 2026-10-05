@@ -168,9 +168,12 @@ describe("date changes", () => {
     const eventId = await api.makeEvent(admin, { date: new Date(Date.now() + 48 * HOUR).toISOString() });
     await api.call(early, "POST", `/api/events/${eventId}/register`);
 
-    // Moved to 5 hours from now: inside the lock.
-    await edit(eventId, { date: new Date(Date.now() + 5 * HOUR).toISOString() });
+    // An admin moves it to tomorrow; `late` signs up after the move.
+    await edit(eventId, { date: new Date(Date.now() + 20 * HOUR).toISOString() });
     await api.call(late, "POST", `/api/events/${eventId}/register`);
+    // Time passes: the event is now 5 hours away, inside the lock. (Moved
+    // directly, so it isn't another date change.)
+    await Event.updateOne({ _id: eventId }, { date: new Date(Date.now() + 5 * HOUR) });
 
     const earlyView = (await api.call(early, "GET", `/api/events/${eventId}`)).body;
     assert.equal(earlyView.myCancelLockWaived, true);

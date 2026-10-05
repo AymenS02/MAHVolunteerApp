@@ -34,6 +34,8 @@ const userSchema = new mongoose.Schema(
     // select: false so it's only loaded where it's explicitly requested
     // (the user's own record and admin endpoints).
     dateOfBirth: { type: Date, select: false },
+    // One switch for all push notifications.
+    notificationsEnabled: { type: Boolean, default: true },
     // Bumped to invalidate every token issued to this user.
     tokenVersion: { type: Number, default: 0 },
   },

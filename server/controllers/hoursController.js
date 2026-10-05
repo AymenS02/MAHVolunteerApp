@@ -2,6 +2,7 @@ import Event from "../models/Event.js";
 import HourAdjustment from "../models/HourAdjustment.js";
 import User from "../models/User.js";
 import { buildHistory, buildSummary, roundHours } from "../services/hours.js";
+import { notifyAdjusted } from "../services/notifications.js";
 import { inTransaction } from "../utils/transaction.js";
 
 export const getMyHours = async (req, res) => {
@@ -209,6 +210,10 @@ export const createAdjustment = async (req, res) => {
         },
       };
     });
+
+    if (result.status === 201) {
+      notifyAdjusted(userId, amount, reason);
+    }
 
     return res.status(result.status).json(result.body);
   } catch (error) {

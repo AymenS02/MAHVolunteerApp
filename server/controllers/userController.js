@@ -1,5 +1,8 @@
 import Event from "../models/Event.js";
+import PushToken from "../models/PushToken.js";
 import User from "../models/User.js";
+import { isPushToken } from "../services/push.js";
+import { promoteFromWaitlist } from "../services/roster.js";
 import { signToken } from "../utils/token.js";
 import { createUserSchema } from "../validators/userValidator.js";
 
@@ -113,6 +116,9 @@ export const changeMyPassword = async (req, res) => {
     user.password = newPassword;
     user.$inc("tokenVersion", 1);
     await user.save();
+    // Signed-out devices stop getting notifications; this device registers
+    // its token again right away.
+    await PushToken.deleteMany({ user: user._id });
 
     return res.json({ message: "Password changed", token: signToken(user) });
   } catch (error) {
@@ -128,27 +134,87 @@ export const deleteMyAccount = async (req, res) => {
         .json({ message: "Admins can't delete their own account." });
     }
 
-    // Remove the user from any events they signed up for or were removed from
+    // Spots this user held go to the waitlist afterwards.
+    const heldSpots = await Event.find({ "volunteers.user": req.user._id })
+      .select("_id")
+      .lean();
+
+    // Remove the user from any events they signed up for, were removed from
+    // or are waiting for.
     await Event.updateMany(
       {
         $or: [
           { "volunteers.user": req.user._id },
           { "removedVolunteers.user": req.user._id },
+          { "waitlist.user": req.user._id },
         ],
       },
       {
         $pull: {
           volunteers: { user: req.user._id },
           removedVolunteers: { user: req.user._id },
+          waitlist: { user: req.user._id },
         },
       },
     );
 
+    await PushToken.deleteMany({ user: req.user._id });
     await User.findByIdAndDelete(req.user._id);
+
+    for (const event of heldSpots) {
+      await promoteFromWaitlist(event._id);
+    }
 
     return res.json({ message: "Account deleted" });
   } catch (error) {
     console.error("[DELETE ACCOUNT] server error:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Registers (or refreshes) this device. A token that belonged to another
+// account on the same phone moves to this one.
+export const savePushToken = async (req, res) => {
+  try {
+    const { token, platform } = req.body;
+
+    if (!isPushToken(token)) {
+      return res.status(400).json({ message: "Not a valid Expo push token" });
+    }
+
+    await PushToken.findOneAndUpdate(
+      { token },
+      { $set: { user: req.user._id, platform, lastSeenAt: new Date() } },
+      { upsert: true },
+    );
+
+    return res.json({ message: "Device registered" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Called by the app on logout. Only removes the caller's own token.
+export const deletePushToken = async (req, res) => {
+  try {
+    await PushToken.deleteOne({ token: req.params.token, user: req.user._id });
+    return res.json({ message: "Device removed" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// The single on/off switch for push notifications.
+export const setNotifications = async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: { notificationsEnabled: req.body.enabled } },
+      { returnDocument: "after" },
+    ).select("+dateOfBirth");
+
+    return res.json({ user: user.toJSON() });
+  } catch (error) {
     return res.status(500).json({ message: error.message });
   }
 };

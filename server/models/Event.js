@@ -27,6 +27,8 @@ const volunteerSchema = new mongoose.Schema(
     hoursResetAt: { type: Date },
     // Missing on registrations made before this field existed.
     registeredAt: { type: Date },
+    // Set when this registration came from the waitlist.
+    promotedAt: { type: Date },
   },
   { _id: false },
 );
@@ -50,6 +52,17 @@ const removedVolunteerSchema = new mongoose.Schema(
   { _id: false },
 );
 
+// People waiting for a spot. Array order is the queue (new people are only
+// ever appended); each group queues separately.
+const waitlistEntrySchema = new mongoose.Schema(
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    gender: { type: String, enum: ["brother", "sister"], required: true },
+    joinedAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const eventSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -63,8 +76,10 @@ const eventSchema = new mongoose.Schema(
     brothersContact: { type: contactSchema, default: undefined },
     sistersContact: { type: contactSchema, default: undefined },
     volunteers: { type: [volunteerSchema], default: [] },
-    // A user is never in both volunteers and removedVolunteers.
+    // A user is in at most one of volunteers, removedVolunteers and waitlist.
     removedVolunteers: { type: [removedVolunteerSchema], default: [] },
+    // Ignored (and cleared) once the event is within 10 hours: see services/roster.js.
+    waitlist: { type: [waitlistEntrySchema], default: [] },
     // Soft delete: null while the event is live.
     deletedAt: { type: Date, default: null, index: true },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

@@ -37,11 +37,24 @@
       "expo-asset",
       "expo-secure-store",
       "@react-native-community/datetimepicker",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "color": "#15803d"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "69b61b3b-ca21-4b51-9697-0c0abe3a3ddb"
+      }
+    },
+    "owner": "aymens02"
   }
 }

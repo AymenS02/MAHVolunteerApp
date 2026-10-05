@@ -7,11 +7,24 @@ import { useAuth } from "@/context/AuthContext";
 import { useSnackbarOffset } from "@/context/SnackbarContext";
 import { HoursHistory } from "@/types";
 import { formatDateOfBirth, getAge } from "@/utils/dateOfBirth";
+import {
+  getPermission,
+  registerDevice,
+  sendTestNotification,
+} from "@/utils/push";
 import { Ionicons } from "@expo/vector-icons";
 import { type Href, useFocusEffect, useRouter } from "expo-router";
 import { useBottomTabBarHeight } from "expo-router/tabs";
 import { useCallback, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Alert,
+  Linking,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  View,
+} from "react-native";
 
 function Row({
   label,
@@ -51,7 +64,9 @@ function LinkRow({ label, href }: { label: string; href: Href }) {
 }
 
 export default function ProfileScreen() {
-  const { user, logout, deleteAccount, refreshUser } = useAuth();
+  const { user, logout, deleteAccount, refreshUser, setNotificationsEnabled } =
+    useAuth();
+  const [savingNotifications, setSavingNotifications] = useState(false);
   const [history, setHistory] = useState<HoursHistory | null>(null);
   useSnackbarOffset(useBottomTabBarHeight());
 
@@ -67,6 +82,30 @@ export default function ProfileScreen() {
   );
 
   if (!user) return null;
+
+  const toggleNotifications = async (enabled: boolean) => {
+    try {
+      setSavingNotifications(true);
+      await setNotificationsEnabled(enabled);
+      if (!enabled) return;
+
+      const registered = await registerDevice({ prompt: true });
+      if (!registered && (await getPermission()) === "denied") {
+        Alert.alert(
+          "Notifications are blocked",
+          "Allow notifications for this app in your phone's settings.",
+          [
+            { text: "Not now", style: "cancel" },
+            { text: "Open settings", onPress: () => Linking.openSettings() },
+          ],
+        );
+      }
+    } catch {
+      Alert.alert("Error", "Could not update notifications");
+    } finally {
+      setSavingNotifications(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -160,6 +199,38 @@ export default function ProfileScreen() {
         />
         <Row label="Role" value={user.role} capitalize />
       </View>
+
+      <View className="mt-8 flex-row items-center justify-between gap-4 rounded-xl bg-gray-50 px-4 py-3.5">
+        <View className="flex-1">
+          <Text className="text-base font-medium text-gray-900">
+            Notifications
+          </Text>
+          <Text className="mt-0.5 text-xs text-gray-500">
+            Reminders, approvals, event changes and messages from organizers
+          </Text>
+        </View>
+        <Switch
+          value={user.notificationsEnabled !== false}
+          onValueChange={toggleNotifications}
+          disabled={savingNotifications}
+          trackColor={{ false: "#969a9e", true: "#15803d" }}
+          ios_backgroundColor="#969a9e"
+          thumbColor="#ffffff"
+          accessibilityLabel="Notifications"
+        />
+      </View>
+
+      {__DEV__ && (
+        <Pressable
+          onPress={() => sendTestNotification("/(tabs)/events")}
+          accessibilityRole="button"
+          className="mt-3 items-center py-2"
+        >
+          <Text className="text-sm font-medium text-gray-500">
+            Send a test notification (development only)
+          </Text>
+        </Pressable>
+      )}
 
       <View className="mt-8">
         <LinkRow label="Edit profile" href="/profile/edit" />

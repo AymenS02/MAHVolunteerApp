@@ -1,5 +1,6 @@
 import api, { setUnauthorizedHandler } from "@/constants/api";
 import { User } from "@/types";
+import { forgetDevice, registerDevice, unregisterDevice } from "@/utils/push";
 import { isAxiosError } from "axios";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
@@ -39,6 +40,8 @@ type AuthContextValue = {
   updateProfile: (fields: ProfileFields) => Promise<void>;
   // Signs out other devices; this one keeps working with the new token.
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  // The one on/off switch for push notifications.
+  setNotificationsEnabled: (enabled: boolean) => Promise<void>;
 };
 
 type ProfileFields = { firstName: string; lastName: string; phone: string };
@@ -156,10 +159,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(data.user);
         return data.user;
       },
-      logout: clearSession,
+      logout: async () => {
+        // Stop notifications to this phone before the session is gone.
+        await unregisterDevice();
+        await clearSession();
+      },
       deleteAccount: async () => {
         // The request interceptor in api.ts attaches the stored token
         await api.delete("/users/me");
+        await forgetDevice();
         await clearSession();
       },
       refreshUser: async () => {
@@ -184,6 +192,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
         await saveSession(data.token);
         setToken(data.token);
+        // The server dropped every device's push token; re-add this one.
+        await registerDevice({ prompt: false });
+      },
+      setNotificationsEnabled: async (enabled) => {
+        const { data } = await api.patch<{ user: User }>(
+          "/users/me/notifications",
+          { enabled },
+        );
+        setUser(data.user);
       },
     };
   }, [restoring, token, user]);

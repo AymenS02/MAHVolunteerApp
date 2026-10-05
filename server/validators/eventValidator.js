@@ -75,3 +75,12 @@ export const eventPageSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
   cursor: z.string().max(200).optional(),
 });
+
+export const eventMessageSchema = z.strictObject({
+  body: z
+    .string({ error: "Write a message" })
+    .trim()
+    .min(1, "Write a message")
+    .max(1000, "Messages must be 1000 characters or fewer"),
+  includeWaitlist: z.boolean().default(false),
+});

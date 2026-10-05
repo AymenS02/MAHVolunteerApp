@@ -9,6 +9,9 @@ import {
   changeMyPassword,
   createUser,
   deleteMyAccount,
+  deletePushToken,
+  savePushToken,
+  setNotifications,
   setMyDateOfBirth,
   updateMyProfile,
 } from "../controllers/userController.js";
@@ -17,6 +20,8 @@ import { requireObjectId, validateBody } from "../middleware/validate.js";
 import {
   changePasswordSchema,
   hourAdjustmentSchema,
+  notificationsSchema,
+  pushTokenSchema,
   setDateOfBirthSchema,
   updateProfileSchema,
 } from "../validators/userValidator.js";
@@ -43,6 +48,14 @@ export const createUserRoutes = ({ passwordLimiter }) => {
     auth,
     validateBody(setDateOfBirthSchema),
     setMyDateOfBirth,
+  );
+  router.post("/me/push-tokens", auth, validateBody(pushTokenSchema), savePushToken);
+  router.delete("/me/push-tokens/:token", auth, deletePushToken);
+  router.patch(
+    "/me/notifications",
+    auth,
+    validateBody(notificationsSchema),
+    setNotifications,
   );
   router.get("/me/hours", auth, getMyHours);
   router.get("/me/hours/summary", auth, getMyHoursSummary);

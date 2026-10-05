@@ -139,3 +139,12 @@ export const changePasswordSchema = z
     message: "New password must be different from your current password",
     path: ["newPassword"],
   });
+
+export const pushTokenSchema = z.strictObject({
+  token: z.string().min(1).max(200),
+  platform: z.enum(["ios", "android", "web"]).optional(),
+});
+
+export const notificationsSchema = z.strictObject({
+  enabled: z.boolean({ error: "enabled must be true or false" }),
+});

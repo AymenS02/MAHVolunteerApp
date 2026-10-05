@@ -10,6 +10,9 @@ import {
   getEventVolunteers,
   getRemovedVolunteers,
   getVolunteersCsv,
+  getWaitlist,
+  joinWaitlist,
+  leaveWaitlist,
   listEvents,
   registerForEvent,
   removeVolunteer,
@@ -19,9 +22,16 @@ import {
   unapproveVolunteer,
   updateEvent,
 } from "../controllers/eventController.js";
+import {
+  listEventMessages,
+  sendEventMessage,
+} from "../controllers/messageController.js";
 import { adminOnly, auth } from "../middleware/auth.js";
 import { requireObjectId, validateBody } from "../middleware/validate.js";
-import { createEventSchema } from "../validators/eventValidator.js";
+import {
+  createEventSchema,
+  eventMessageSchema,
+} from "../validators/eventValidator.js";
 
 const router = express.Router();
 
@@ -42,6 +52,16 @@ router.post("/:id/restore", adminOnly, restoreEvent);
 router.post("/:id/register", registerForEvent);
 router.delete("/:id/register", cancelRegistration);
 router.post("/:id/register/undo", undoCancelRegistration);
+router.post("/:id/waitlist", joinWaitlist);
+router.delete("/:id/waitlist", leaveWaitlist);
+router.get("/:id/waitlist", adminOnly, getWaitlist);
+router.post(
+  "/:id/messages",
+  adminOnly,
+  validateBody(eventMessageSchema),
+  sendEventMessage,
+);
+router.get("/:id/messages", listEventMessages);
 router.get("/:id/volunteers", adminOnly, getEventVolunteers);
 router.get("/:id/volunteers.csv", adminOnly, getVolunteersCsv);
 router.patch("/:id/volunteers/:userId/approve", adminOnly, approveVolunteer);

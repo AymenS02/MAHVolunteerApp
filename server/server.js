@@ -3,6 +3,7 @@
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import { createApp } from "./app.js";
+import { startScheduler } from "./services/notifications.js";
 
 dotenv.config();
 
@@ -27,3 +28,9 @@ const PORT = process.env.PORT || 5000;
 createApp().listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// Reminders, nudges, delayed notices and delivery checks. Runs only while
+// this server is up; timed reminders need an always-on host.
+if (process.env.DISABLE_SCHEDULER !== "true") {
+  startScheduler();
+}

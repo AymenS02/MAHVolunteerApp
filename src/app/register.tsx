@@ -1,5 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
 import { Gender } from "@/types";
+import axios from "axios";
 import { Link, Redirect, useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -57,14 +58,14 @@ export default function Register() {
   const router = useRouter();
   const { user, register } = useAuth();
   const [formData, setFormData] = useState<FormData>({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    password: "",
-    confirmPassword: "",
-    gender: null,
-    highschoolStudent: false,
+    firstName: "Ay",
+    lastName: "Shots",
+    email: "aymen@gmail.com",
+    phone: "2896891515",
+    password: "A12345",
+    confirmPassword: "A12345",
+    gender: "brother",
+    highschoolStudent: true,
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [showPassword, setShowPassword] = useState(false);
@@ -74,14 +75,18 @@ export default function Register() {
     return <Redirect href="/(tabs)/events" />;
   }
 
-  const handleChange = <K extends keyof FormData>(field: K, value: FormData[K]) => {
+  const handleChange = <K extends keyof FormData>(
+    field: K,
+    value: FormData[K],
+  ) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
-
   const handleSubmit = async () => {
+    console.log("Submitting form data:", formData);
     const validationErrors = validate(formData);
     setErrors(validationErrors);
+
     if (Object.keys(validationErrors).length > 0 || !formData.gender) return;
 
     setLoading(true);
@@ -97,11 +102,39 @@ export default function Register() {
       });
 
       router.replace("/(tabs)/events");
-    } catch (error: any) {
-      Alert.alert(
-        "Registration failed",
-        error.response?.data?.message || "Please check your details and try again.",
-      );
+    } catch (error: unknown) {
+      let message = "Please check your details and try again.";
+
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          // Server responded with 4xx/5xx
+          console.log(
+            "[REGISTER] Server error:",
+            error.response.status,
+            JSON.stringify(error.response.data),
+          );
+          message = error.response.data?.message ?? message;
+        } else if (error.request) {
+          // Request sent, no response: wrong URL/IP, server down, firewall
+          console.log(
+            "[REGISTER] No response:",
+            error.config?.baseURL,
+            error.config?.url,
+            error.code,
+            error.message,
+          );
+          message = "Can't reach the server. Check your connection.";
+        } else {
+          console.log("[REGISTER] Request setup error:", error.message);
+        }
+      } else if (error instanceof Error) {
+        // Plain JS error thrown inside register() or your own code
+        console.log("[REGISTER] Code error:", error.message, "\n", error.stack);
+      } else {
+        console.log("[REGISTER] Unknown error:", error);
+      }
+
+      Alert.alert("Registration failed", message);
     } finally {
       setLoading(false);
     }
@@ -117,7 +150,9 @@ export default function Register() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="mb-2 text-3xl font-bold text-gray-900">Create Account</Text>
+        <Text className="mb-2 text-3xl font-bold text-gray-900">
+          Create Account
+        </Text>
         <Text className="mb-8 text-gray-500">Join MAH as a volunteer</Text>
 
         <View className="mb-4 flex-row gap-3">
@@ -129,7 +164,9 @@ export default function Register() {
               className={errors.firstName ? inputErrorClass : inputClass}
             />
             {errors.firstName && (
-              <Text className="mt-1 text-xs text-red-500">{errors.firstName}</Text>
+              <Text className="mt-1 text-xs text-red-500">
+                {errors.firstName}
+              </Text>
             )}
           </View>
           <View className="flex-1">
@@ -140,7 +177,9 @@ export default function Register() {
               className={errors.lastName ? inputErrorClass : inputClass}
             />
             {errors.lastName && (
-              <Text className="mt-1 text-xs text-red-500">{errors.lastName}</Text>
+              <Text className="mt-1 text-xs text-red-500">
+                {errors.lastName}
+              </Text>
             )}
           </View>
         </View>
@@ -154,7 +193,9 @@ export default function Register() {
             onChangeText={(text) => handleChange("email", text)}
             className={errors.email ? inputErrorClass : inputClass}
           />
-          {errors.email && <Text className="mt-1 text-xs text-red-500">{errors.email}</Text>}
+          {errors.email && (
+            <Text className="mt-1 text-xs text-red-500">{errors.email}</Text>
+          )}
         </View>
 
         <View className="mb-4">
@@ -165,7 +206,9 @@ export default function Register() {
             onChangeText={(text) => handleChange("phone", text)}
             className={errors.phone ? inputErrorClass : inputClass}
           />
-          {errors.phone && <Text className="mt-1 text-xs text-red-500">{errors.phone}</Text>}
+          {errors.phone && (
+            <Text className="mt-1 text-xs text-red-500">{errors.phone}</Text>
+          )}
         </View>
 
         <View className="mb-4">
@@ -206,7 +249,9 @@ export default function Register() {
             className={errors.confirmPassword ? inputErrorClass : inputClass}
           />
           {errors.confirmPassword && (
-            <Text className="mt-1 text-xs text-red-500">{errors.confirmPassword}</Text>
+            <Text className="mt-1 text-xs text-red-500">
+              {errors.confirmPassword}
+            </Text>
           )}
         </View>
 
@@ -216,7 +261,9 @@ export default function Register() {
             <Pressable
               onPress={() => handleChange("gender", "brother")}
               className={`flex-1 rounded-lg border p-3 ${
-                formData.gender === "brother" ? "border-green-700 bg-green-700" : "border-gray-200"
+                formData.gender === "brother"
+                  ? "border-green-700 bg-green-700"
+                  : "border-gray-200"
               }`}
             >
               <Text
@@ -230,7 +277,9 @@ export default function Register() {
             <Pressable
               onPress={() => handleChange("gender", "sister")}
               className={`flex-1 rounded-lg border p-3 ${
-                formData.gender === "sister" ? "border-green-700 bg-green-700" : "border-gray-200"
+                formData.gender === "sister"
+                  ? "border-green-700 bg-green-700"
+                  : "border-gray-200"
               }`}
             >
               <Text
@@ -242,12 +291,16 @@ export default function Register() {
               </Text>
             </Pressable>
           </View>
-          {errors.gender && <Text className="mt-1 text-xs text-red-500">{errors.gender}</Text>}
+          {errors.gender && (
+            <Text className="mt-1 text-xs text-red-500">{errors.gender}</Text>
+          )}
         </View>
 
         <View className="mb-2 flex-row items-center justify-between rounded-lg border border-gray-300 px-4 py-3">
           <View className="flex-1 pr-4">
-            <Text className="font-medium text-gray-900">I&apos;m a high school student</Text>
+            <Text className="font-medium text-gray-900">
+              I&apos;m a high school student
+            </Text>
             <Text className="mt-0.5 text-xs text-gray-500">
               Helps us track volunteer hours for school
             </Text>
@@ -268,7 +321,9 @@ export default function Register() {
           {loading ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text className="text-center font-semibold text-white">Create Account</Text>
+            <Text className="text-center font-semibold text-white">
+              Create Account
+            </Text>
           )}
         </Pressable>
 

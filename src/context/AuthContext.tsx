@@ -21,6 +21,7 @@ type AuthContextValue = {
   login: (email: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -60,16 +61,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     restore();
   }, []);
 
-  const value = useMemo<AuthContextValue>(
-    () => ({
+  const value = useMemo<AuthContextValue>(() => {
+    const clearSession = async () => {
+      await SecureStore.deleteItemAsync("auth_token");
+      setToken(null);
+      setUser(null);
+    };
+
+    return {
       user,
       token,
       restoring,
       login: async (email, password) => {
-        const { data } = await api.post<{ token: string; user: User }>("/auth/login", {
-          email,
-          password,
-        });
+        const { data } = await api.post<{ token: string; user: User }>(
+          "/auth/login",
+          {
+            email,
+            password,
+          },
+        );
 
         await saveSession(data.token);
         setToken(data.token);
@@ -85,14 +95,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(data.token);
         setUser(data.user);
       },
-      logout: async () => {
-        await SecureStore.deleteItemAsync("auth_token");
-        setToken(null);
-        setUser(null);
+      logout: clearSession,
+      deleteAccount: async () => {
+        // The request interceptor in api.ts attaches the stored token
+        await api.delete("/users/me");
+        await clearSession();
       },
-    }),
-    [restoring, token, user],
-  );
+    };
+  }, [restoring, token, user]);
 
   if (restoring) {
     return (

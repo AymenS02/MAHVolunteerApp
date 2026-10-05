@@ -12,12 +12,14 @@ export const login = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
+      return res
+        .status(400)
+        .json({ message: "Email and password are required" });
     }
 
-    const user = await User.findOne({ email: email.trim().toLowerCase() }).select(
-      "+password",
-    );
+    const user = await User.findOne({
+      email: email.trim().toLowerCase(),
+    }).select("+password");
 
     if (!user) {
       return res.status(401).json({ message: "Invalid email or password" });

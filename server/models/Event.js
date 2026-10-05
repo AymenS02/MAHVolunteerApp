@@ -36,7 +36,7 @@ const eventSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-eventSchema.pre("validate", function enforceContactRequirements(next) {
+eventSchema.pre("validate", function enforceContactRequirements() {
   if (this.brothersMax > 0) {
     if (!this.brothersContact?.name || !this.brothersContact?.phone) {
       this.invalidate(
@@ -58,8 +58,6 @@ eventSchema.pre("validate", function enforceContactRequirements(next) {
   } else {
     this.sistersContact = undefined;
   }
-
-  next();
 });
 
 export default mongoose.model("Event", eventSchema);

@@ -1,28 +1,25 @@
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { Stack, usePathname, useRouter } from "expo-router";
-import { useEffect } from "react";
+import { Stack } from "expo-router";
 import "../../global.css";
 
 function AppNavigator() {
   const { user } = useAuth();
-  const pathname = usePathname();
-  const router = useRouter();
 
-  useEffect(() => {
-    const onAuthScreen = pathname === "/" || pathname === "/login" || pathname === "/register";
-    const onProtectedScreen = pathname.startsWith("/(tabs)") || pathname.startsWith("/events") || pathname.startsWith("/admin");
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Protected guard={!!user}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="events" />
+        <Stack.Screen name="admin" />
+      </Stack.Protected>
 
-    if (!user && onProtectedScreen) {
-      router.replace("/");
-      return;
-    }
-
-    if (user && onAuthScreen) {
-      router.replace("/(tabs)/events");
-    }
-  }, [pathname, router, user]);
-
-  return <Stack screenOptions={{ headerShown: false }} />;
+      <Stack.Protected guard={!user}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
+      </Stack.Protected>
+    </Stack>
+  );
 }
 
 export default function RootLayout() {

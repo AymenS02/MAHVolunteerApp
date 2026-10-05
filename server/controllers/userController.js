@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import Event from "../models/Event.js";
 import User from "../models/User.js";
 import { createUserSchema } from "../validators/userValidator.js";
 
@@ -50,6 +51,29 @@ export const createUser = async (req, res) => {
 
     return res.status(201).json({ token, user: newUser.toJSON() });
   } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+export const deleteMyAccount = async (req, res) => {
+  try {
+    if (req.user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Admins can't delete their own account." });
+    }
+
+    // Remove the user from any events they signed up for
+    await Event.updateMany(
+      { "volunteers.user": req.user._id },
+      { $pull: { volunteers: { user: req.user._id } } },
+    );
+
+    await User.findByIdAndDelete(req.user._id);
+
+    return res.json({ message: "Account deleted" });
+  } catch (error) {
+    console.error("[DELETE ACCOUNT] server error:", error);
     return res.status(500).json({ message: error.message });
   }
 };

@@ -1,5 +1,12 @@
 import { Text } from "react-native";
 
 export default function SectionHeader({ title }: { title: string }) {
-  return <Text className="text-xl font-bold text-slate-900">{title}</Text>;
+  return (
+    <Text
+      accessibilityRole="header"
+      className="text-lg font-semibold text-gray-900"
+    >
+      {title}
+    </Text>
+  );
 }

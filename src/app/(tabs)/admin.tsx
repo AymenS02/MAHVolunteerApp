@@ -1,10 +1,12 @@
+import Button from "@/components/Button";
 import EventCard from "@/components/EventCard";
+import SectionHeader from "@/components/SectionHeader";
 import api from "@/constants/api";
 import { useAuth } from "@/context/AuthContext";
 import { Event } from "@/types";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
 
 export default function AdminTabScreen() {
   const { user } = useAuth();
@@ -22,7 +24,10 @@ export default function AdminTabScreen() {
       const { data } = await api.get<Event[]>("/events");
       setEvents(data);
     } catch (error: any) {
-      Alert.alert("Error", error.response?.data?.message || "Failed to load events");
+      Alert.alert(
+        "Error",
+        error.response?.data?.message || "Failed to load events",
+      );
     } finally {
       setLoading(false);
     }
@@ -36,8 +41,13 @@ export default function AdminTabScreen() {
 
   if (user?.role !== "admin") {
     return (
-      <View className="flex-1 items-center justify-center bg-white px-6">
-        <Text className="text-center text-gray-500">Admin access required.</Text>
+      <View className="flex-1 items-center justify-center bg-white px-8">
+        <Text className="text-base font-semibold text-gray-900">
+          Admins only
+        </Text>
+        <Text className="mt-1 text-center text-sm text-gray-500">
+          You need an admin account to manage events.
+        </Text>
       </View>
     );
   }
@@ -51,22 +61,47 @@ export default function AdminTabScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-white" contentContainerClassName="gap-4 p-5">
-      <Pressable
+    <ScrollView
+      className="flex-1 bg-white"
+      contentContainerClassName="gap-6 px-5 pb-10 pt-4"
+      showsVerticalScrollIndicator={false}
+    >
+      <Button
+        title="Create event"
         onPress={() => router.push("/admin/create-event")}
-        className="rounded-lg bg-green-700 p-4"
-      >
-        <Text className="text-center font-semibold text-white">Create Event</Text>
-      </Pressable>
+      />
 
-      <Text className="text-xl font-semibold text-gray-900">All Events</Text>
-      {events.map((event) => (
-        <EventCard
-          key={event._id}
-          event={event}
-          onPress={() => router.push(`/admin/events/${event._id}/volunteers`)}
-        />
-      ))}
+      <View className="gap-3">
+        <View className="gap-1">
+          <SectionHeader title="All events" />
+          {events.length > 0 && (
+            <Text className="text-sm text-gray-500">
+              Tap an event to manage its volunteers.
+            </Text>
+          )}
+        </View>
+
+        {events.length === 0 ? (
+          <View className="items-center px-8 py-16">
+            <Text className="text-base font-semibold text-gray-900">
+              No events yet
+            </Text>
+            <Text className="mt-1 text-center text-sm text-gray-500">
+              Create your first event and volunteers can start signing up.
+            </Text>
+          </View>
+        ) : (
+          events.map((event) => (
+            <EventCard
+              key={event._id}
+              event={event}
+              onPress={() =>
+                router.push(`/admin/events/${event._id}/volunteers`)
+              }
+            />
+          ))
+        )}
+      </View>
     </ScrollView>
   );
 }

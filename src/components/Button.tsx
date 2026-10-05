@@ -1,22 +1,30 @@
-import { Pressable, Text } from "react-native";
+import { ActivityIndicator, Pressable, Text } from "react-native";
 
 type Props = {
   title: string;
   onPress: () => void;
   variant?: "primary" | "outline" | "danger";
   className?: string;
+  disabled?: boolean;
+  loading?: boolean;
 };
 
 const containerStyles = {
-  primary: "bg-emerald-600 active:bg-emerald-700",
-  outline: "bg-white border border-slate-300 active:bg-slate-100",
+  primary: "bg-green-700 active:bg-green-800",
+  outline: "border border-gray-300 bg-white active:bg-gray-50",
   danger: "bg-red-600 active:bg-red-700",
 };
 
 const textStyles = {
   primary: "text-white",
-  outline: "text-slate-800",
+  outline: "text-gray-900",
   danger: "text-white",
+};
+
+const spinnerColors = {
+  primary: "#ffffff",
+  outline: "#15803d",
+  danger: "#ffffff",
 };
 
 export default function Button({
@@ -24,15 +32,28 @@ export default function Button({
   onPress,
   variant = "primary",
   className = "",
+  disabled = false,
+  loading = false,
 }: Props) {
+  const inactive = disabled || loading;
+
   return (
     <Pressable
       onPress={onPress}
-      className={`items-center justify-center rounded-xl px-4 py-3 ${containerStyles[variant]} ${className}`}
+      disabled={inactive}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: inactive, busy: loading }}
+      className={`min-h-[52px] items-center justify-center rounded-xl px-5 ${
+        containerStyles[variant]
+      } ${disabled ? "opacity-40" : ""} ${className}`}
     >
-      <Text className={`text-base font-semibold ${textStyles[variant]}`}>
-        {title}
-      </Text>
+      {loading ? (
+        <ActivityIndicator color={spinnerColors[variant]} />
+      ) : (
+        <Text className={`text-base font-semibold ${textStyles[variant]}`}>
+          {title}
+        </Text>
+      )}
     </Pressable>
   );
 }

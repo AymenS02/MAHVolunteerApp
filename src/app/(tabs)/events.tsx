@@ -3,13 +3,64 @@ import api from "@/constants/api";
 import { Event } from "@/types";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+
+type Tab = "upcoming" | "past";
+
+function EmptyState({ title, hint }: { title: string; hint: string }) {
+  return (
+    <View className="items-center px-8 py-20">
+      <Text className="text-base font-semibold text-gray-900">{title}</Text>
+      <Text className="mt-1 text-center text-sm text-gray-500">{hint}</Text>
+    </View>
+  );
+}
+
+function TabButton({
+  label,
+  count,
+  active,
+  onPress,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      className={`flex-1 items-center rounded-lg py-2.5 ${
+        active ? "bg-white shadow-sm" : ""
+      }`}
+    >
+      <Text
+        className={`text-sm ${
+          active ? "font-semibold text-gray-900" : "font-medium text-gray-500"
+        }`}
+      >
+        {label}
+        <Text className="font-normal text-gray-400"> {count}</Text>
+      </Text>
+    </Pressable>
+  );
+}
 
 export default function EventsScreen() {
   const router = useRouter();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(0);
+  const [tab, setTab] = useState<Tab>("upcoming");
 
   const loadEvents = useCallback(async () => {
     try {
@@ -18,7 +69,10 @@ export default function EventsScreen() {
       setEvents(data);
       setNow(Date.now());
     } catch (error: any) {
-      Alert.alert("Error", error.response?.data?.message || "Failed to load events");
+      Alert.alert(
+        "Error",
+        error.response?.data?.message || "Failed to load events",
+      );
     } finally {
       setLoading(false);
     }
@@ -46,37 +100,54 @@ export default function EventsScreen() {
     );
   }
 
+  const visible = tab === "upcoming" ? upcoming : past;
+
   return (
-    <ScrollView className="flex-1 bg-white" contentContainerClassName="gap-8 p-5">
-      <View className="gap-3">
-        <Text className="text-xl font-semibold text-gray-900">Upcoming</Text>
-        {upcoming.length === 0 ? (
-          <Text className="text-gray-500">No upcoming events.</Text>
-        ) : (
-          upcoming.map((event) => (
-            <EventCard
-              key={event._id}
-              event={event}
-              onPress={() => router.push(`/events/${event._id}`)}
-            />
-          ))
-        )}
+    <ScrollView
+      className="flex-1 bg-white"
+      contentContainerClassName="gap-3 px-5 pb-10 pt-4"
+      showsVerticalScrollIndicator={false}
+    >
+      <View
+        accessibilityRole="tablist"
+        className="mb-2 flex-row rounded-xl bg-gray-100 p-1"
+      >
+        <TabButton
+          label="Upcoming"
+          count={upcoming.length}
+          active={tab === "upcoming"}
+          onPress={() => setTab("upcoming")}
+        />
+        <TabButton
+          label="Past"
+          count={past.length}
+          active={tab === "past"}
+          onPress={() => setTab("past")}
+        />
       </View>
 
-      <View className="gap-3">
-        <Text className="text-xl font-semibold text-gray-900">Past</Text>
-        {past.length === 0 ? (
-          <Text className="text-gray-500">No past events.</Text>
+      {visible.length === 0 ? (
+        tab === "upcoming" ? (
+          <EmptyState
+            title="No upcoming events"
+            hint="New volunteer opportunities will show up here."
+          />
         ) : (
-          past.map((event) => (
+          <EmptyState
+            title="No past events"
+            hint="Events you've been part of will appear here."
+          />
+        )
+      ) : (
+        visible.map((event) => (
+          <View key={event._id} className={tab === "past" ? "opacity-60" : ""}>
             <EventCard
-              key={event._id}
               event={event}
               onPress={() => router.push(`/events/${event._id}`)}
             />
-          ))
-        )}
-      </View>
+          </View>
+        ))
+      )}
     </ScrollView>
   );
 }

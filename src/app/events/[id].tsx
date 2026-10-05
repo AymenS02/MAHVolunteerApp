@@ -1,3 +1,6 @@
+import BackBar from "@/components/BackBar";
+import Button from "@/components/Button";
+import SectionHeader from "@/components/SectionHeader";
 import api from "@/constants/api";
 import { useAuth } from "@/context/AuthContext";
 import { Event } from "@/types";
@@ -12,6 +15,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const formatDate = (date: string) =>
   new Date(date).toLocaleString([], {
@@ -21,6 +25,15 @@ const formatDate = (date: string) =>
     hour: "numeric",
     minute: "2-digit",
   });
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View className="flex-row gap-4">
+      <Text className="w-16 text-sm text-gray-500">{label}</Text>
+      <Text className="flex-1 text-base text-gray-900">{value}</Text>
+    </View>
+  );
+}
 
 export default function EventDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -37,7 +50,10 @@ export default function EventDetailsScreen() {
       setEvent(data);
       setNow(Date.now());
     } catch (error: any) {
-      Alert.alert("Error", error.response?.data?.message || "Failed to load event");
+      Alert.alert(
+        "Error",
+        error.response?.data?.message || "Failed to load event",
+      );
     } finally {
       setLoading(false);
     }
@@ -50,16 +66,24 @@ export default function EventDetailsScreen() {
   );
 
   const eventState = useMemo(() => {
-    if (!event || !user) return { disabled: true, label: "Loading", reason: "" };
+    if (!event || !user)
+      return { disabled: true, label: "Loading", reason: "" };
 
     const start = new Date(event.date).getTime();
     const cancelLock = start - 10 * 60 * 60 * 1000;
     const registeredCount =
-      user.gender === "brother" ? event.brothersRegistered : event.sistersRegistered;
-    const maxCount = user.gender === "brother" ? event.brothersMax : event.sistersMax;
+      user.gender === "brother"
+        ? event.brothersRegistered
+        : event.sistersRegistered;
+    const maxCount =
+      user.gender === "brother" ? event.brothersMax : event.sistersMax;
 
     if (event.myStatus === "approved") {
-      return { disabled: true, label: `Hours confirmed (+${event.hours} hrs)`, reason: "" };
+      return {
+        disabled: true,
+        label: `Hours confirmed (+${event.hours} hrs)`,
+        reason: "",
+      };
     }
 
     if (event.myStatus === "registered") {
@@ -114,7 +138,8 @@ export default function EventDetailsScreen() {
             } catch (error: any) {
               Alert.alert(
                 "Error",
-                error.response?.data?.message || "Failed to cancel registration",
+                error.response?.data?.message ||
+                  "Failed to cancel registration",
               );
             } finally {
               setActionLoading(false);
@@ -138,8 +163,11 @@ export default function EventDetailsScreen() {
 
   if (loading || !event) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator color="#15803d" />
+      <View className="flex-1 bg-white">
+        <BackBar />
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#15803d" />
+        </View>
       </View>
     );
   }
@@ -151,53 +179,124 @@ export default function EventDetailsScreen() {
         ? event.sistersContact
         : undefined;
 
+  const approved = event.myStatus === "approved";
+  const registered = event.myStatus === "registered";
+
   return (
-    <ScrollView className="flex-1 bg-white" contentContainerClassName="gap-4 p-5">
-      <View className="rounded-lg border border-gray-200 bg-white p-4">
-        <Text className="text-2xl font-bold text-gray-900">{event.name}</Text>
-        <Text className="mt-2 text-gray-500">{formatDate(event.date)}</Text>
-        <Text className="text-gray-500">{event.location}</Text>
-        <Text className="mt-2 text-green-700">{event.hours} volunteer hours</Text>
+    <View className="flex-1 bg-white">
+      <BackBar />
 
-        {event.brothersMax > 0 && (
-          <Text className="mt-3 text-gray-500">
-            Brothers: {event.brothersRegistered}/{event.brothersMax}
-          </Text>
-        )}
-        {event.sistersMax > 0 && (
-          <Text className="text-gray-500">
-            Sisters: {event.sistersRegistered}/{event.sistersMax}
-          </Text>
-        )}
-      </View>
-
-      {(event.myStatus === "registered" || event.myStatus === "approved") && userContact && (
-        <View className="rounded-lg border border-gray-200 bg-white p-4">
-          <Text className="text-lg font-semibold text-gray-900">Your contact</Text>
-          <Text className="mt-2 text-gray-500">{userContact.name}</Text>
-          <Pressable onPress={() => Linking.openURL(`tel:${userContact.phone}`)}>
-            <Text className="mt-1 font-semibold text-green-700">{userContact.phone}</Text>
-          </Pressable>
-        </View>
-      )}
-
-      <Pressable
-        onPress={handleAction}
-        disabled={eventState.disabled || actionLoading}
-        className={`rounded-lg p-4 ${eventState.disabled ? "bg-gray-200" : "bg-green-700"}`}
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="gap-8 px-5 pb-8 pt-2"
+        showsVerticalScrollIndicator={false}
       >
-        {actionLoading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text
-            className={`text-center font-semibold ${eventState.disabled ? "text-gray-500" : "text-white"}`}
-          >
-            {eventState.label}
+        <View className="gap-3">
+          {(registered || approved) && (
+            <View
+              className={`self-start rounded-full px-2.5 py-1 ${
+                approved ? "bg-green-700" : "bg-green-100"
+              }`}
+            >
+              <Text
+                className={`text-xs font-semibold ${
+                  approved ? "text-white" : "text-green-800"
+                }`}
+              >
+                {approved ? "Approved" : "Registered"}
+              </Text>
+            </View>
+          )}
+          <Text className="text-3xl font-semibold text-gray-900">
+            {event.name}
           </Text>
-        )}
-      </Pressable>
+        </View>
 
-      {eventState.reason ? <Text className="text-sm text-gray-500">{eventState.reason}</Text> : null}
-    </ScrollView>
+        <View className="gap-4 rounded-2xl bg-gray-50 p-5">
+          <DetailRow label="When" value={formatDate(event.date)} />
+          <DetailRow label="Where" value={event.location} />
+          <DetailRow
+            label="Hours"
+            value={`${event.hours} volunteer ${event.hours === 1 ? "hour" : "hours"}`}
+          />
+        </View>
+
+        {(event.brothersMax > 0 || event.sistersMax > 0) && (
+          <View className="gap-3">
+            <SectionHeader title="Spots" />
+            {event.brothersMax > 0 && (
+              <View className="flex-row items-center justify-between">
+                <Text className="text-base text-gray-900">Brothers</Text>
+                <Text className="text-base text-gray-500">
+                  {event.brothersRegistered} of {event.brothersMax} filled
+                </Text>
+              </View>
+            )}
+            {event.sistersMax > 0 && (
+              <View className="flex-row items-center justify-between">
+                <Text className="text-base text-gray-900">Sisters</Text>
+                <Text className="text-base text-gray-500">
+                  {event.sistersRegistered} of {event.sistersMax} filled
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {(registered || approved) && userContact && (
+          <View className="gap-3">
+            <SectionHeader title="Your contact" />
+            <View className="flex-row items-center justify-between gap-4">
+              <Text className="flex-1 text-base text-gray-900">
+                {userContact.name}
+              </Text>
+              <Pressable
+                onPress={() => Linking.openURL(`tel:${userContact.phone}`)}
+                accessibilityRole="link"
+                hitSlop={8}
+              >
+                <Text className="text-base font-semibold text-green-700">
+                  {userContact.phone}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+      </ScrollView>
+
+      <View className="border-t border-gray-100 bg-white">
+        <SafeAreaView edges={["bottom"]}>
+          <View className="gap-2 px-5 pb-3 pt-3">
+            {eventState.disabled ? (
+              <View
+                className={`min-h-[52px] items-center justify-center rounded-xl px-5 ${
+                  approved ? "bg-green-50" : "bg-gray-100"
+                }`}
+              >
+                <Text
+                  className={`text-base font-semibold ${
+                    approved ? "text-green-800" : "text-gray-500"
+                  }`}
+                >
+                  {eventState.label}
+                </Text>
+              </View>
+            ) : (
+              <Button
+                title={eventState.label}
+                onPress={handleAction}
+                loading={actionLoading}
+                variant={registered ? "outline" : "primary"}
+              />
+            )}
+            {eventState.reason ? (
+              <Text className="text-center text-sm text-gray-500">
+                {eventState.reason}
+              </Text>
+            ) : null}
+          </View>
+        </SafeAreaView>
+      </View>
+    </View>
   );
 }

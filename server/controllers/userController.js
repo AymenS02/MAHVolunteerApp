@@ -63,10 +63,20 @@ export const deleteMyAccount = async (req, res) => {
         .json({ message: "Admins can't delete their own account." });
     }
 
-    // Remove the user from any events they signed up for
+    // Remove the user from any events they signed up for or were removed from
     await Event.updateMany(
-      { "volunteers.user": req.user._id },
-      { $pull: { volunteers: { user: req.user._id } } },
+      {
+        $or: [
+          { "volunteers.user": req.user._id },
+          { "removedVolunteers.user": req.user._id },
+        ],
+      },
+      {
+        $pull: {
+          volunteers: { user: req.user._id },
+          removedVolunteers: { user: req.user._id },
+        },
+      },
     );
 
     await User.findByIdAndDelete(req.user._id);

@@ -1,6 +1,10 @@
 import Button from "@/components/Button";
 import StatCard from "@/components/StatCard";
 import { useAuth } from "@/context/AuthContext";
+import { useSnackbarOffset } from "@/context/SnackbarContext";
+import { useFocusEffect } from "expo-router";
+import { useBottomTabBarHeight } from "expo-router/tabs";
+import { useCallback } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
 function Row({
@@ -26,7 +30,15 @@ function Row({
 }
 
 export default function ProfileScreen() {
-  const { user, logout, deleteAccount } = useAuth();
+  const { user, logout, deleteAccount, refreshUser } = useAuth();
+  useSnackbarOffset(useBottomTabBarHeight());
+
+  // Hours change when an admin approves or unapproves, so refresh on focus.
+  useFocusEffect(
+    useCallback(() => {
+      refreshUser().catch(() => {});
+    }, [refreshUser]),
+  );
 
   if (!user) return null;
 

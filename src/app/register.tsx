@@ -1,10 +1,11 @@
+import Button from "@/components/Button";
 import { useAuth } from "@/context/AuthContext";
 import { Gender } from "@/types";
+import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import { Link, Redirect, useRouter } from "expo-router";
-import { useState } from "react";
+import { type ReactNode, type RefObject, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -13,8 +14,10 @@ import {
   Switch,
   Text,
   TextInput,
+  TextInputProps,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type FormData = {
   firstName: string;
@@ -51,25 +54,89 @@ const validate = (data: FormData): FormErrors => {
   return errors;
 };
 
-const inputClass = "border border-gray-300 rounded-lg p-4 text-gray-900";
-const inputErrorClass = "border border-red-500 rounded-lg p-4 text-gray-900";
+type FieldProps = TextInputProps & {
+  label: string;
+  error?: string;
+  hint?: string;
+  inputRef?: RefObject<TextInput | null>;
+  right?: ReactNode;
+};
+
+function Field({ label, error, hint, inputRef, right, ...props }: FieldProps) {
+  return (
+    <View className="gap-1.5">
+      <Text className="text-sm font-medium text-gray-700">{label}</Text>
+      <View className="justify-center">
+        <TextInput
+          ref={inputRef}
+          placeholderTextColor="#9ca3af"
+          className={`rounded-xl px-4 py-3.5 text-base text-gray-900 ${
+            error ? "bg-red-50" : "bg-gray-50"
+          } ${right ? "pr-12" : ""}`}
+          {...props}
+        />
+        {right ? <View className="absolute right-4">{right}</View> : null}
+      </View>
+      {error ? (
+        <Text className="text-xs text-red-600">{error}</Text>
+      ) : hint ? (
+        <Text className="text-xs text-gray-500">{hint}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function GroupOption({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      className={`min-h-[52px] flex-1 items-center justify-center rounded-xl ${
+        selected ? "bg-green-700" : "bg-gray-50 active:bg-gray-100"
+      }`}
+    >
+      <Text
+        className={`text-base font-semibold ${
+          selected ? "text-white" : "text-gray-900"
+        }`}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 export default function Register() {
   const router = useRouter();
   const { user, register } = useAuth();
   const [formData, setFormData] = useState<FormData>({
-    firstName: "Ay",
-    lastName: "Shots",
-    email: "aymen@gmail.com",
-    phone: "2896891515",
-    password: "A12345",
-    confirmPassword: "A12345",
-    gender: "brother",
-    highschoolStudent: true,
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    password: "",
+    confirmPassword: "",
+    gender: null,
+    highschoolStudent: false,
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const lastNameRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+  const phoneRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
 
   if (user) {
     return <Redirect href="/(tabs)/events" />;
@@ -82,8 +149,8 @@ export default function Register() {
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
+
   const handleSubmit = async () => {
-    console.log("Submitting form data:", formData);
     const validationErrors = validate(formData);
     setErrors(validationErrors);
 
@@ -107,7 +174,6 @@ export default function Register() {
 
       if (axios.isAxiosError(error)) {
         if (error.response) {
-          // Server responded with 4xx/5xx
           console.log(
             "[REGISTER] Server error:",
             error.response.status,
@@ -115,7 +181,6 @@ export default function Register() {
           );
           message = error.response.data?.message ?? message;
         } else if (error.request) {
-          // Request sent, no response: wrong URL/IP, server down, firewall
           console.log(
             "[REGISTER] No response:",
             error.config?.baseURL,
@@ -128,7 +193,6 @@ export default function Register() {
           console.log("[REGISTER] Request setup error:", error.message);
         }
       } else if (error instanceof Error) {
-        // Plain JS error thrown inside register() or your own code
         console.log("[REGISTER] Code error:", error.message, "\n", error.stack);
       } else {
         console.log("[REGISTER] Unknown error:", error);
@@ -141,201 +205,191 @@ export default function Register() {
   };
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-white"
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        contentContainerClassName="flex-grow justify-center px-6 py-12"
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+    <SafeAreaView className="flex-1 bg-white">
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <Text className="mb-2 text-3xl font-bold text-gray-900">
-          Create Account
-        </Text>
-        <Text className="mb-8 text-gray-500">Join MAH as a volunteer</Text>
+        <ScrollView
+          contentContainerClassName="px-6 pb-10 pt-8"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text className="text-sm font-semibold text-green-700">
+            MAH Volunteer
+          </Text>
+          <Text className="mt-3 text-4xl font-semibold text-gray-900">
+            Create your account
+          </Text>
+          <Text className="mt-2 text-base text-gray-500">
+            Sign up for events and keep track of your volunteer hours.
+          </Text>
 
-        <View className="mb-4 flex-row gap-3">
-          <View className="flex-1">
-            <TextInput
-              placeholder="First Name"
-              value={formData.firstName}
-              onChangeText={(text) => handleChange("firstName", text)}
-              className={errors.firstName ? inputErrorClass : inputClass}
-            />
-            {errors.firstName && (
-              <Text className="mt-1 text-xs text-red-500">
-                {errors.firstName}
-              </Text>
-            )}
-          </View>
-          <View className="flex-1">
-            <TextInput
-              placeholder="Last Name"
-              value={formData.lastName}
-              onChangeText={(text) => handleChange("lastName", text)}
-              className={errors.lastName ? inputErrorClass : inputClass}
-            />
-            {errors.lastName && (
-              <Text className="mt-1 text-xs text-red-500">
-                {errors.lastName}
-              </Text>
-            )}
-          </View>
-        </View>
+          <View className="mt-10 gap-5">
+            <View className="flex-row gap-3">
+              <View className="flex-1">
+                <Field
+                  label="First name"
+                  value={formData.firstName}
+                  onChangeText={(text) => handleChange("firstName", text)}
+                  error={errors.firstName}
+                  autoComplete="given-name"
+                  textContentType="givenName"
+                  returnKeyType="next"
+                  onSubmitEditing={() => lastNameRef.current?.focus()}
+                />
+              </View>
+              <View className="flex-1">
+                <Field
+                  label="Last name"
+                  inputRef={lastNameRef}
+                  value={formData.lastName}
+                  onChangeText={(text) => handleChange("lastName", text)}
+                  error={errors.lastName}
+                  autoComplete="family-name"
+                  textContentType="familyName"
+                  returnKeyType="next"
+                  onSubmitEditing={() => emailRef.current?.focus()}
+                />
+              </View>
+            </View>
 
-        <View className="mb-4">
-          <TextInput
-            placeholder="Email"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={formData.email}
-            onChangeText={(text) => handleChange("email", text)}
-            className={errors.email ? inputErrorClass : inputClass}
-          />
-          {errors.email && (
-            <Text className="mt-1 text-xs text-red-500">{errors.email}</Text>
-          )}
-        </View>
-
-        <View className="mb-4">
-          <TextInput
-            placeholder="Phone Number"
-            keyboardType="phone-pad"
-            value={formData.phone}
-            onChangeText={(text) => handleChange("phone", text)}
-            className={errors.phone ? inputErrorClass : inputClass}
-          />
-          {errors.phone && (
-            <Text className="mt-1 text-xs text-red-500">{errors.phone}</Text>
-          )}
-        </View>
-
-        <View className="mb-4">
-          <View className="relative justify-center">
-            <TextInput
-              placeholder="Password"
-              secureTextEntry={!showPassword}
+            <Field
+              label="Email"
+              inputRef={emailRef}
+              value={formData.email}
+              onChangeText={(text) => handleChange("email", text)}
+              error={errors.email}
+              placeholder="you@example.com"
+              keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              returnKeyType="next"
+              onSubmitEditing={() => phoneRef.current?.focus()}
+            />
+
+            <Field
+              label="Phone number"
+              inputRef={phoneRef}
+              value={formData.phone}
+              onChangeText={(text) => handleChange("phone", text)}
+              error={errors.phone}
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              textContentType="telephoneNumber"
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+            />
+
+            <Field
+              label="Password"
+              inputRef={passwordRef}
               value={formData.password}
               onChangeText={(text) => handleChange("password", text)}
-              className={`${errors.password ? inputErrorClass : inputClass} pr-16`}
+              error={errors.password}
+              hint="At least 6 characters, including one uppercase letter"
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              returnKeyType="next"
+              onSubmitEditing={() => confirmRef.current?.focus()}
+              right={
+                <Pressable
+                  onPress={() => setShowPassword((prev) => !prev)}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showPassword ? "Hide password" : "Show password"
+                  }
+                  hitSlop={8}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color="#6b7280"
+                  />
+                </Pressable>
+              }
             />
-            <Pressable
-              onPress={() => setShowPassword((prev) => !prev)}
-              className="absolute right-4"
-            >
-              <Text className="text-sm font-semibold text-green-700">
-                {showPassword ? "Hide" : "Show"}
+
+            <Field
+              label="Confirm password"
+              inputRef={confirmRef}
+              value={formData.confirmPassword}
+              onChangeText={(text) => handleChange("confirmPassword", text)}
+              error={errors.confirmPassword}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              returnKeyType="go"
+              onSubmitEditing={handleSubmit}
+            />
+
+            <View className="gap-1.5">
+              <Text className="text-sm font-medium text-gray-700">
+                I&apos;m signing up as
+              </Text>
+              <View accessibilityRole="radiogroup" className="flex-row gap-3">
+                <GroupOption
+                  label="Brother"
+                  selected={formData.gender === "brother"}
+                  onPress={() => handleChange("gender", "brother")}
+                />
+                <GroupOption
+                  label="Sister"
+                  selected={formData.gender === "sister"}
+                  onPress={() => handleChange("gender", "sister")}
+                />
+              </View>
+              {errors.gender ? (
+                <Text className="text-xs text-red-600">{errors.gender}</Text>
+              ) : null}
+            </View>
+
+            <View className="flex-row items-center justify-between rounded-xl bg-gray-50 px-4 py-3.5">
+              <View className="flex-1 pr-4">
+                <Text className="text-base font-medium text-gray-900">
+                  I&apos;m a high school student
+                </Text>
+                <Text className="mt-0.5 text-xs text-gray-500">
+                  Helps us track volunteer hours for school
+                </Text>
+              </View>
+              <Switch
+                value={formData.highschoolStudent}
+                onValueChange={(value) =>
+                  handleChange("highschoolStudent", value)
+                }
+                trackColor={{ false: "#969a9e", true: "#15803d" }}
+                ios_backgroundColor="#969a9e"
+                thumbColor="#ffffff"
+              />
+            </View>
+          </View>
+
+          <View className="mt-8">
+            <Button
+              title="Create account"
+              onPress={handleSubmit}
+              loading={loading}
+            />
+          </View>
+
+          <Link href="/login" asChild>
+            <Pressable className="mt-6 py-2" accessibilityRole="link">
+              <Text className="text-center text-gray-500">
+                Already have an account?
+                <Text className="font-semibold text-green-700"> Log in</Text>
               </Text>
             </Pressable>
-          </View>
-          {errors.password ? (
-            <Text className="mt-1 text-xs text-red-500">{errors.password}</Text>
-          ) : (
-            <Text className="mt-1 text-xs text-gray-500">
-              At least 6 characters, including one uppercase letter
-            </Text>
-          )}
-        </View>
-
-        <View className="mb-4">
-          <TextInput
-            placeholder="Confirm Password"
-            secureTextEntry={!showPassword}
-            autoCapitalize="none"
-            value={formData.confirmPassword}
-            onChangeText={(text) => handleChange("confirmPassword", text)}
-            className={errors.confirmPassword ? inputErrorClass : inputClass}
-          />
-          {errors.confirmPassword && (
-            <Text className="mt-1 text-xs text-red-500">
-              {errors.confirmPassword}
-            </Text>
-          )}
-        </View>
-
-        <View className="mb-4">
-          <Text className="mb-2 text-gray-900">Gender</Text>
-          <View className="flex-row gap-3">
-            <Pressable
-              onPress={() => handleChange("gender", "brother")}
-              className={`flex-1 rounded-lg border p-3 ${
-                formData.gender === "brother"
-                  ? "border-green-700 bg-green-700"
-                  : "border-gray-200"
-              }`}
-            >
-              <Text
-                className={`text-center font-medium ${
-                  formData.gender === "brother" ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Brother
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => handleChange("gender", "sister")}
-              className={`flex-1 rounded-lg border p-3 ${
-                formData.gender === "sister"
-                  ? "border-green-700 bg-green-700"
-                  : "border-gray-200"
-              }`}
-            >
-              <Text
-                className={`text-center font-medium ${
-                  formData.gender === "sister" ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Sister
-              </Text>
-            </Pressable>
-          </View>
-          {errors.gender && (
-            <Text className="mt-1 text-xs text-red-500">{errors.gender}</Text>
-          )}
-        </View>
-
-        <View className="mb-2 flex-row items-center justify-between rounded-lg border border-gray-300 px-4 py-3">
-          <View className="flex-1 pr-4">
-            <Text className="font-medium text-gray-900">
-              I&apos;m a high school student
-            </Text>
-            <Text className="mt-0.5 text-xs text-gray-500">
-              Helps us track volunteer hours for school
-            </Text>
-          </View>
-          <Switch
-            value={formData.highschoolStudent}
-            onValueChange={(value) => handleChange("highschoolStudent", value)}
-            trackColor={{ false: "#d1d5db", true: "#15803d" }}
-            thumbColor="#ffffff"
-          />
-        </View>
-
-        <Pressable
-          onPress={handleSubmit}
-          disabled={loading}
-          className="mt-4 items-center rounded-lg bg-green-700 p-4"
-        >
-          {loading ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text className="text-center font-semibold text-white">
-              Create Account
-            </Text>
-          )}
-        </Pressable>
-
-        <Link href="/login" asChild>
-          <Pressable className="mt-6">
-            <Text className="text-center text-gray-500">
-              Already have an account?
-              <Text className="font-semibold text-green-700"> Login</Text>
-            </Text>
-          </Pressable>
-        </Link>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          </Link>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

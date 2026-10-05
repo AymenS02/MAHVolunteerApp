@@ -28,6 +28,7 @@ export type Event = {
   myStatus: EventStatus;
   brothersContact?: { name: string; phone: string };
   sistersContact?: { name: string; phone: string };
+  deletedAt?: string | null;
 };
 
 export type EventVolunteer = {
@@ -37,4 +38,14 @@ export type EventVolunteer = {
   phone: string;
   gender: Gender;
   status: "registered" | "approved";
+};
+
+export type RemovedVolunteer = {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  gender: Gender;
+  previousStatus: "registered" | "approved";
+  removedAt: string;
 };

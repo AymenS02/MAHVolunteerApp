@@ -17,6 +17,25 @@ const volunteerSchema = new mongoose.Schema(
       enum: ["registered", "approved"],
       default: "registered",
     },
+    // Hours added to user.volunteerHours when approved; unapproving subtracts exactly this.
+    hoursAwarded: { type: Number },
+  },
+  { _id: false },
+);
+
+// Volunteers an admin removed, kept so the removal can be undone.
+const removedVolunteerSchema = new mongoose.Schema(
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    gender: { type: String, enum: ["brother", "sister"], required: true },
+    previousStatus: {
+      type: String,
+      enum: ["registered", "approved"],
+      required: true,
+    },
+    hoursAwarded: { type: Number },
+    removedAt: { type: Date, default: Date.now },
+    removedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { _id: false },
 );
@@ -32,6 +51,11 @@ const eventSchema = new mongoose.Schema(
     brothersContact: { type: contactSchema, default: undefined },
     sistersContact: { type: contactSchema, default: undefined },
     volunteers: { type: [volunteerSchema], default: [] },
+    // A user is never in both volunteers and removedVolunteers.
+    removedVolunteers: { type: [removedVolunteerSchema], default: [] },
+    // Soft delete: null while the event is live.
+    deletedAt: { type: Date, default: null, index: true },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true },
 );

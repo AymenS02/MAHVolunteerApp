@@ -1,9 +1,13 @@
 import BackBar from "@/components/BackBar";
+import PillButton from "@/components/PillButton";
 import SectionHeader from "@/components/SectionHeader";
 import api from "@/constants/api";
-import { EventVolunteer } from "@/types";
-import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useSnackbar } from "@/context/SnackbarContext";
+import { EventVolunteer, RemovedVolunteer } from "@/types";
+import { apiErrorMessage } from "@/utils/apiError";
+import { notifyEventsChanged } from "@/utils/eventsChanged";
+import { isAxiosError } from "axios";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,23 +19,32 @@ import {
   View,
 } from "react-native";
 
+type RestoreResult = { overCapacity?: boolean };
+
+const fullName = (person: { firstName: string; lastName: string }) =>
+  `${person.firstName} ${person.lastName}`;
+
 function VolunteerRow({
   volunteer,
-  approving,
-  onApprove,
+  busy,
+  action,
+  onRemove,
 }: {
   volunteer: EventVolunteer;
-  approving: boolean;
-  onApprove?: () => void;
+  busy: boolean;
+  action: { title: string; variant: "primary" | "outline"; onPress: () => void };
+  onRemove: () => void;
 }) {
+  const name = fullName(volunteer);
+
   return (
-    <View className="flex-row items-center justify-between gap-4 border-b border-gray-100 py-4">
+    <View className="flex-row items-center gap-3 border-b border-gray-100 py-4">
       <View className="flex-1">
         <Text
           numberOfLines={1}
           className="text-base font-semibold text-gray-900"
         >
-          {volunteer.firstName} {volunteer.lastName}
+          {name}
         </Text>
         <View className="mt-0.5 flex-row items-center gap-2">
           <Text className="text-sm text-gray-500">
@@ -49,52 +62,95 @@ function VolunteerRow({
         </View>
       </View>
 
-      {onApprove ? (
-        <Pressable
-          onPress={onApprove}
-          disabled={approving}
-          accessibilityRole="button"
-          accessibilityLabel={`Approve ${volunteer.firstName} ${volunteer.lastName}`}
-          className="min-w-[88px] items-center rounded-full bg-green-700 px-4 py-2.5 active:bg-green-800"
-        >
-          {approving ? (
-            <ActivityIndicator color="#ffffff" size="small" />
-          ) : (
-            <Text className="text-sm font-semibold text-white">Approve</Text>
-          )}
-        </Pressable>
-      ) : (
-        <View className="flex-row items-center gap-1">
-          <Ionicons name="checkmark-circle" size={18} color="#15803d" />
-          <Text className="text-sm font-medium text-green-800">Approved</Text>
-        </View>
-      )}
+      <Pressable
+        onPress={onRemove}
+        disabled={busy}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${name}`}
+        hitSlop={8}
+        className="px-1 py-2"
+      >
+        <Text className="text-sm font-medium text-gray-500">Remove</Text>
+      </Pressable>
+
+      <PillButton
+        title={action.title}
+        variant={action.variant}
+        onPress={action.onPress}
+        loading={busy}
+        accessibilityLabel={`${action.title} ${name}`}
+      />
+    </View>
+  );
+}
+
+function RemovedRow({
+  volunteer,
+  busy,
+  onRestore,
+}: {
+  volunteer: RemovedVolunteer;
+  busy: boolean;
+  onRestore: () => void;
+}) {
+  const name = fullName(volunteer);
+
+  return (
+    <View className="flex-row items-center gap-3 border-b border-gray-100 py-4">
+      <View className="flex-1">
+        <Text numberOfLines={1} className="text-base font-semibold text-gray-500">
+          {name}
+        </Text>
+        <Text className="mt-0.5 text-sm text-gray-500">
+          {volunteer.gender === "brother" ? "Brother" : "Sister"} · was{" "}
+          {volunteer.previousStatus === "approved" ? "approved" : "registered"}
+        </Text>
+      </View>
+      <PillButton
+        title="Restore"
+        variant="outline"
+        onPress={onRestore}
+        loading={busy}
+        accessibilityLabel={`Restore ${name}`}
+      />
     </View>
   );
 }
 
 export default function EventVolunteersScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const { show } = useSnackbar();
   const [volunteers, setVolunteers] = useState<EventVolunteer[]>([]);
+  const [removed, setRemoved] = useState<RemovedVolunteer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const loadVolunteers = useCallback(async () => {
-    try {
-      setLoading(true);
-      const { data } = await api.get<EventVolunteer[]>(
-        `/events/${id}/volunteers`,
-      );
-      setVolunteers(data);
-    } catch (error: any) {
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || "Failed to load volunteers",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  const loadVolunteers = useCallback(
+    async (showSpinner = true) => {
+      try {
+        if (showSpinner) setLoading(true);
+        const [current, gone] = await Promise.all([
+          api.get<EventVolunteer[]>(`/events/${id}/volunteers`),
+          api.get<RemovedVolunteer[]>(`/events/${id}/volunteers/removed`),
+        ]);
+        setVolunteers(current.data);
+        setRemoved(gone.data);
+        setMissing(false);
+      } catch (error) {
+        if (isAxiosError(error) && error.response?.status === 404) {
+          setMissing(true);
+        } else {
+          Alert.alert("Error", apiErrorMessage(error, "Failed to load volunteers"));
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [id],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -102,26 +158,116 @@ export default function EventVolunteersScreen() {
     }, [loadVolunteers]),
   );
 
-  const approve = async (userId: string) => {
+  // Runs a row action with that row's spinner showing.
+  const withBusy = async (
+    userId: string,
+    fallback: string,
+    action: () => Promise<void>,
+  ) => {
     try {
-      setApprovingId(userId);
-      await api.patch(`/events/${id}/volunteers/${userId}/approve`);
-      setVolunteers((prev) =>
-        prev.map((volunteer) =>
-          volunteer.userId === userId
-            ? { ...volunteer, status: "approved" }
-            : volunteer,
-        ),
-      );
-    } catch (error: any) {
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || "Failed to approve volunteer",
-      );
+      setBusyId(userId);
+      await action();
+    } catch (error) {
+      Alert.alert("Error", apiErrorMessage(error, fallback));
     } finally {
-      setApprovingId(null);
+      setBusyId(null);
     }
   };
+
+  const restoredMessage = (name: string, result: RestoreResult) =>
+    result.overCapacity
+      ? `${name} is back. This event is now over its spot limit.`
+      : `${name} restored`;
+
+  const approve = (volunteer: EventVolunteer) =>
+    withBusy(volunteer.userId, "Failed to approve volunteer", async () => {
+      await api.patch(`/events/${id}/volunteers/${volunteer.userId}/approve`);
+      await loadVolunteers(false);
+    });
+
+  const unapprove = (volunteer: EventVolunteer) =>
+    withBusy(volunteer.userId, "Failed to undo approval", async () => {
+      await api.patch(`/events/${id}/volunteers/${volunteer.userId}/unapprove`);
+      await loadVolunteers(false);
+      show({
+        message: `${fullName(volunteer)} unapproved`,
+        actionLabel: "Undo",
+        onAction: async () => {
+          await api.patch(
+            `/events/${id}/volunteers/${volunteer.userId}/approve`,
+          );
+          await loadVolunteers(false);
+        },
+      });
+    });
+
+  const remove = (volunteer: EventVolunteer) =>
+    withBusy(volunteer.userId, "Failed to remove volunteer", async () => {
+      await api.delete(`/events/${id}/volunteers/${volunteer.userId}`);
+      await loadVolunteers(false);
+      show({
+        message: `${fullName(volunteer)} removed`,
+        actionLabel: "Undo",
+        onAction: async () => {
+          const { data } = await api.post<RestoreResult>(
+            `/events/${id}/volunteers/${volunteer.userId}/restore`,
+          );
+          await loadVolunteers(false);
+          if (data.overCapacity) return restoredMessage(fullName(volunteer), data);
+        },
+      });
+    });
+
+  const restore = (volunteer: RemovedVolunteer) =>
+    withBusy(volunteer.userId, "Failed to restore volunteer", async () => {
+      const { data } = await api.post<RestoreResult>(
+        `/events/${id}/volunteers/${volunteer.userId}/restore`,
+      );
+      await loadVolunteers(false);
+      show({ message: restoredMessage(fullName(volunteer), data) });
+    });
+
+  // No confirm dialog: the event can be restored from Undo or Recently deleted.
+  const deleteEvent = async () => {
+    try {
+      setDeleting(true);
+      await api.delete(`/events/${id}`);
+      notifyEventsChanged();
+      show({
+        message: "Event deleted",
+        actionLabel: "Undo",
+        onAction: async () => {
+          await api.post(`/events/${id}/restore`);
+          notifyEventsChanged();
+          return "Event restored";
+        },
+      });
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace("/(tabs)/admin");
+      }
+    } catch (error) {
+      Alert.alert("Error", apiErrorMessage(error, "Failed to delete event"));
+      setDeleting(false);
+    }
+  };
+
+  if (missing) {
+    return (
+      <View className="flex-1 bg-white">
+        <BackBar fallback="/(tabs)/admin" />
+        <View className="flex-1 items-center justify-center px-8">
+          <Text className="text-base font-semibold text-gray-900">
+            Event not available
+          </Text>
+          <Text className="mt-1 text-center text-sm text-gray-500">
+            This event was deleted. You can restore it from the admin tab.
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   if (loading) {
     return (
@@ -140,6 +286,7 @@ export default function EventVolunteersScreen() {
   const approved = volunteers.filter(
     (volunteer) => volunteer.status === "approved",
   );
+  const canDelete = approved.length === 0;
 
   return (
     <View className="flex-1 bg-white">
@@ -180,8 +327,13 @@ export default function EventVolunteersScreen() {
                     <VolunteerRow
                       key={volunteer.userId}
                       volunteer={volunteer}
-                      approving={approvingId === volunteer.userId}
-                      onApprove={() => approve(volunteer.userId)}
+                      busy={busyId === volunteer.userId}
+                      action={{
+                        title: "Approve",
+                        variant: "primary",
+                        onPress: () => approve(volunteer),
+                      }}
+                      onRemove={() => remove(volunteer)}
                     />
                   ))}
                 </View>
@@ -196,7 +348,13 @@ export default function EventVolunteersScreen() {
                     <VolunteerRow
                       key={volunteer.userId}
                       volunteer={volunteer}
-                      approving={false}
+                      busy={busyId === volunteer.userId}
+                      action={{
+                        title: "Unapprove",
+                        variant: "outline",
+                        onPress: () => unapprove(volunteer),
+                      }}
+                      onRemove={() => remove(volunteer)}
                     />
                   ))}
                 </View>
@@ -204,6 +362,46 @@ export default function EventVolunteersScreen() {
             )}
           </>
         )}
+
+        {removed.length > 0 && (
+          <View>
+            <SectionHeader title="Removed" />
+            <View className="mt-1">
+              {removed.map((volunteer) => (
+                <RemovedRow
+                  key={volunteer.userId}
+                  volunteer={volunteer}
+                  busy={busyId === volunteer.userId}
+                  onRestore={() => restore(volunteer)}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+
+        <View className="items-center">
+          <Pressable
+            onPress={deleteEvent}
+            disabled={!canDelete || deleting}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canDelete, busy: deleting }}
+            hitSlop={8}
+            className={`items-center py-3 ${canDelete ? "" : "opacity-40"}`}
+          >
+            {deleting ? (
+              <ActivityIndicator color="#dc2626" />
+            ) : (
+              <Text className="text-sm font-medium text-red-600">
+                Delete event
+              </Text>
+            )}
+          </Pressable>
+          {!canDelete && (
+            <Text className="text-center text-sm text-gray-500">
+              Unapprove all volunteers before deleting this event.
+            </Text>
+          )}
+        </View>
       </ScrollView>
     </View>
   );

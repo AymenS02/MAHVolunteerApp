@@ -22,6 +22,8 @@ type AuthContextValue = {
   register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
+  // Re-fetches the user, e.g. after an admin changed their volunteer hours.
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -100,6 +102,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // The request interceptor in api.ts attaches the stored token
         await api.delete("/users/me");
         await clearSession();
+      },
+      refreshUser: async () => {
+        const { data } = await api.get<User>("/auth/me");
+        setUser(data);
       },
     };
   }, [restoring, token, user]);

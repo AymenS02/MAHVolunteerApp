@@ -1,22 +1,27 @@
+import Button from "@/components/Button";
 import { useAuth } from "@/context/AuthContext";
+import { Ionicons } from "@expo/vector-icons";
 import { Link, Redirect, router } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function LoginScreen() {
   const { user, login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const passwordRef = useRef<TextInput>(null);
 
   if (user) {
     return <Redirect href="/(tabs)/events" />;
@@ -33,58 +38,111 @@ export default function LoginScreen() {
       await login(email.trim().toLowerCase(), password);
       router.replace("/(tabs)/events");
     } catch (error: any) {
-      Alert.alert("Login failed", error.response?.data?.message || "Please try again.");
+      Alert.alert(
+        "Login failed",
+        error.response?.data?.message || "Please try again.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1 justify-center bg-white px-6"
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <Text className="text-3xl font-bold text-gray-900">Login</Text>
-      <Text className="mt-2 text-gray-500">Welcome back to MAH Volunteer</Text>
-
-      <View className="mt-8 gap-4">
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholder="Email"
-          className="rounded-lg border border-gray-200 p-4 text-gray-900"
-        />
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          placeholder="Password"
-          className="rounded-lg border border-gray-200 p-4 text-gray-900"
-        />
-      </View>
-
-      <Pressable
-        onPress={handleLogin}
-        disabled={loading}
-        className="mt-6 rounded-lg bg-green-700 p-4"
+    <SafeAreaView className="flex-1 bg-white">
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text className="text-center font-semibold text-white">Login</Text>
-        )}
-      </Pressable>
-
-      <Link href="/register" asChild>
-        <Pressable className="mt-6">
-          <Text className="text-center text-gray-500">
-            Don&apos;t have an account?
-            <Text className="font-semibold text-green-700"> Register</Text>
+        <ScrollView
+          contentContainerClassName="flex-grow justify-center px-6 py-10"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text className="text-sm font-semibold text-green-700">
+            MAH Volunteer
           </Text>
-        </Pressable>
-      </Link>
-    </KeyboardAvoidingView>
+          <Text className="mt-3 text-4xl font-semibold text-gray-900">
+            Welcome back
+          </Text>
+          <Text className="mt-2 text-base text-gray-500">
+            Log in to see events and track your hours.
+          </Text>
+
+          <View className="mt-10 gap-5">
+            <View className="gap-1.5">
+              <Text className="text-sm font-medium text-gray-700">Email</Text>
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                keyboardType="email-address"
+                returnKeyType="next"
+                onSubmitEditing={() => passwordRef.current?.focus()}
+                placeholder="you@example.com"
+                placeholderTextColor="#9ca3af"
+                className="rounded-xl bg-gray-50 px-4 py-3.5 text-base text-gray-900"
+              />
+            </View>
+
+            <View className="gap-1.5">
+              <Text className="text-sm font-medium text-gray-700">
+                Password
+              </Text>
+              <View className="justify-center">
+                <TextInput
+                  ref={passwordRef}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="password"
+                  textContentType="password"
+                  returnKeyType="go"
+                  onSubmitEditing={handleLogin}
+                  placeholder="Your password"
+                  placeholderTextColor="#9ca3af"
+                  className="rounded-xl bg-gray-50 px-4 py-3.5 pr-12 text-base text-gray-900"
+                />
+                <Pressable
+                  onPress={() => setShowPassword((prev) => !prev)}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showPassword ? "Hide password" : "Show password"
+                  }
+                  hitSlop={8}
+                  className="absolute right-4"
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color="#6b7280"
+                  />
+                </Pressable>
+              </View>
+            </View>
+          </View>
+
+          <View className="mt-8">
+            <Button title="Log in" onPress={handleLogin} loading={loading} />
+          </View>
+
+          <Link href="/register" asChild>
+            <Pressable className="mt-6 py-2" accessibilityRole="link">
+              <Text className="text-center text-gray-500">
+                New here?
+                <Text className="font-semibold text-green-700">
+                  {" "}
+                  Create an account
+                </Text>
+              </Text>
+            </Pressable>
+          </Link>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

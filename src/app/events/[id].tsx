@@ -3,7 +3,11 @@ import Button from "@/components/Button";
 import SectionHeader from "@/components/SectionHeader";
 import api from "@/constants/api";
 import { useAuth } from "@/context/AuthContext";
+import { useSnackbar, useSnackbarOffset } from "@/context/SnackbarContext";
 import { Event } from "@/types";
+import { apiErrorMessage } from "@/utils/apiError";
+import { notifyEventsChanged } from "@/utils/eventsChanged";
+import { isAxiosError } from "axios";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -42,18 +46,24 @@ export default function EventDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [now, setNow] = useState(0);
+  const [missing, setMissing] = useState(false);
+  const [actionBarHeight, setActionBarHeight] = useState(0);
+  const { show } = useSnackbar();
+  useSnackbarOffset(actionBarHeight);
 
   const loadEvent = useCallback(async () => {
     try {
       setLoading(true);
       const { data } = await api.get<Event>(`/events/${id}`);
       setEvent(data);
+      setMissing(false);
       setNow(Date.now());
-    } catch (error: any) {
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || "Failed to load event",
-      );
+    } catch (error) {
+      if (isAxiosError(error) && error.response?.status === 404) {
+        setMissing(true);
+      } else {
+        Alert.alert("Error", apiErrorMessage(error, "Failed to load event"));
+      }
     } finally {
       setLoading(false);
     }
@@ -95,7 +105,7 @@ export default function EventDetailsScreen() {
         };
       }
 
-      return { disabled: false, label: "Cancel Registration", reason: "" };
+      return { disabled: false, label: "Cancel registration", reason: "" };
     }
 
     if (now >= start) {
@@ -118,35 +128,41 @@ export default function EventDetailsScreen() {
       };
     }
 
-    return { disabled: false, label: "Register to Volunteer", reason: "" };
+    return { disabled: false, label: "Register to volunteer", reason: "" };
   }, [event, now, user]);
 
   const handleAction = async () => {
     if (!event) return;
 
+    // No confirm dialog: the Undo snackbar is the safety net.
     if (event.myStatus === "registered") {
-      Alert.alert("Cancel registration", "Are you sure you want to cancel?", [
-        { text: "Keep", style: "cancel" },
-        {
-          text: "Cancel registration",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setActionLoading(true);
-              await api.delete(`/events/${event._id}/register`);
-              await loadEvent();
-            } catch (error: any) {
-              Alert.alert(
-                "Error",
-                error.response?.data?.message ||
-                  "Failed to cancel registration",
-              );
-            } finally {
-              setActionLoading(false);
-            }
+      try {
+        setActionLoading(true);
+        const { data } = await api.delete<Event>(
+          `/events/${event._id}/register`,
+        );
+        setEvent(data);
+        notifyEventsChanged();
+        show({
+          message: "Registration cancelled",
+          actionLabel: "Undo",
+          onAction: async () => {
+            const { data: restored } = await api.post<Event>(
+              `/events/${event._id}/register/undo`,
+            );
+            setEvent(restored);
+            notifyEventsChanged();
+            return "You're registered again";
           },
-        },
-      ]);
+        });
+      } catch (error) {
+        Alert.alert(
+          "Error",
+          apiErrorMessage(error, "Failed to cancel registration"),
+        );
+      } finally {
+        setActionLoading(false);
+      }
       return;
     }
 
@@ -160,6 +176,22 @@ export default function EventDetailsScreen() {
       setActionLoading(false);
     }
   };
+
+  if (missing) {
+    return (
+      <View className="flex-1 bg-white">
+        <BackBar />
+        <View className="flex-1 items-center justify-center px-8">
+          <Text className="text-base font-semibold text-gray-900">
+            Event not available
+          </Text>
+          <Text className="mt-1 text-center text-sm text-gray-500">
+            This event was removed or no longer exists.
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   if (loading || !event) {
     return (
@@ -264,7 +296,10 @@ export default function EventDetailsScreen() {
         )}
       </ScrollView>
 
-      <View className="border-t border-gray-100 bg-white">
+      <View
+        onLayout={(e) => setActionBarHeight(e.nativeEvent.layout.height)}
+        className="border-t border-gray-100 bg-white"
+      >
         <SafeAreaView edges={["bottom"]}>
           <View className="gap-2 px-5 pb-3 pt-3">
             {eventState.disabled ? (

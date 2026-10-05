@@ -1,8 +1,11 @@
 import EventCard from "@/components/EventCard";
 import api from "@/constants/api";
+import { useSnackbarOffset } from "@/context/SnackbarContext";
 import { Event } from "@/types";
+import { onEventsChanged } from "@/utils/eventsChanged";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useBottomTabBarHeight } from "expo-router/tabs";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -39,8 +42,10 @@ function TabButton({
       onPress={onPress}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
+      // Both states set a shadow so NativeWind sees its CSS variables on the
+      // first render; adding them later remounts the button and crashes in dev.
       className={`flex-1 items-center rounded-lg py-2.5 ${
-        active ? "bg-white shadow-sm" : ""
+        active ? "bg-white shadow-sm" : "shadow-none"
       }`}
     >
       <Text
@@ -61,10 +66,11 @@ export default function EventsScreen() {
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(0);
   const [tab, setTab] = useState<Tab>("upcoming");
+  useSnackbarOffset(useBottomTabBarHeight());
 
-  const loadEvents = useCallback(async () => {
+  const loadEvents = useCallback(async (showSpinner = true) => {
     try {
-      setLoading(true);
+      if (showSpinner) setLoading(true);
       const { data } = await api.get<Event[]>("/events");
       setEvents(data);
       setNow(Date.now());
@@ -83,6 +89,8 @@ export default function EventsScreen() {
       loadEvents();
     }, [loadEvents]),
   );
+
+  useEffect(() => onEventsChanged(() => loadEvents(false)), [loadEvents]);
 
   const { upcoming, past } = useMemo(
     () => ({
